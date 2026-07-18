@@ -1,0 +1,6 @@
+{
+  "name": "OmniBrowser",
+  "description": "A privacy-focused native Android browser with built-in ad blocking, Chrome-like extension compatibility, fast loading, custom download manager, and beautiful Material 3 design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

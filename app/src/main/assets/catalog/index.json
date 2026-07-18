@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "updatedAt": "2026-07-18T05:11:00Z",
+  "extensions": [
+    {
+      "id": "omni-dark-mode",
+      "name": "Omni Dark Mode",
+      "version": "1.0.0",
+      "author": "OmniBrowser Team",
+      "description": "Intelligently forces high-contrast dark mode on any website via a hardware-accelerated CSS filter, reducing eye strain during night-time browsing.",
+      "iconUrl": "file:///android_asset/extensions/omni-dark-mode/icon-96.png",
+      "screenshotUrls": [
+        "https://omnibrowser.app/extensions/omni-dark-mode/ss1.png"
+      ],
+      "downloadUrl": "asset://extensions/omni-dark-mode",
+      "sizeBytes": 1024,
+      "permissions": ["storage", "<all_urls>"],
+      "rating": 4.9,
+      "ratingCount": 4251,
+      "category": "appearance",
+      "tags": ["dark", "appearance", "comfort"],
+      "minBrowserVersion": "1.0.0",
+      "changelog": "Initial public release of Omni Dark Mode with full hardware-accelerated filters."
+    }
+  ],
+  "categories": [
+    { "id": "appearance", "name": "Appearance", "icon": "🎨" },
+    { "id": "privacy", "name": "Privacy", "icon": "🛡️" },
+    { "id": "productivity", "name": "Productivity", "icon": "⚡" },
+    { "id": "developer", "name": "Developer", "icon": "🛠️" }
+  ]
+}

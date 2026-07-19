@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,16 +44,27 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        // Pre-create WebView Code Cache directories to prevent Chromium opendir errors
+        try {
+            val webViewCacheDir = java.io.File(cacheDir, "WebView/Default/HTTP Cache/Code Cache")
+            java.io.File(webViewCacheDir, "js").mkdirs()
+            java.io.File(webViewCacheDir, "wasm").mkdirs()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         val container = (application as BrowserApplication).container
 
         setContent {
-            MyApplicationTheme {
+            val factory = remember { ViewModelFactory(container) }
+            val browserViewModel = remember { ViewModelProvider(this@MainActivity, factory)[BrowserViewModel::class.java] }
+            val currentTab by browserViewModel.currentTab.collectAsState()
+
+            MyApplicationTheme(isIncognito = currentTab?.isPrivate == true) {
                 val context = LocalContext.current
                 val coroutineScope = rememberCoroutineScope()
 
                 // Instantiate ViewModels
-                val factory = remember { ViewModelFactory(container) }
-                val browserViewModel = remember { ViewModelProvider(this@MainActivity, factory)[BrowserViewModel::class.java] }
                 val bookmarksViewModel = remember { ViewModelProvider(this@MainActivity, factory)[BookmarksViewModel::class.java] }
                 val historyViewModel = remember { ViewModelProvider(this@MainActivity, factory)[HistoryViewModel::class.java] }
                 val downloadsViewModel = remember { ViewModelProvider(this@MainActivity, factory)[DownloadsViewModel::class.java] }
@@ -117,12 +129,16 @@ class MainActivity : ComponentActivity() {
                 var currentScreen by remember { mutableStateOf(BrowserScreenType.BROWSER) }
                 var selectedCatalogItem by remember { mutableStateOf<CatalogIndexEntity?>(null) }
                 var showMenu by remember { mutableStateOf(false) }
+                var areBarsVisible by remember { mutableStateOf(true) }
 
                 // State observers
                 val tabs by browserViewModel.tabs.collectAsState()
                 val activeTabId by browserViewModel.activeTabId.collectAsState()
-                val currentTab by browserViewModel.currentTab.collectAsState()
                 val customDnsUrl by browserViewModel.customDnsUrl.collectAsState()
+
+                LaunchedEffect(activeTabId, currentTab?.url, currentScreen) {
+                    areBarsVisible = true
+                }
 
                 val totalAdsBlocked by browserViewModel.totalAdsBlocked.collectAsState()
                 val totalTrackersBlocked by browserViewModel.totalTrackersBlocked.collectAsState()
@@ -159,48 +175,70 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
-                        if (currentScreen == BrowserScreenType.BROWSER) {
-                            Surface(
-                                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
-                                color = MaterialTheme.colorScheme.surface
+                        if (currentScreen == BrowserScreenType.BROWSER && currentTab != null && currentTab?.url != "omni://home") {
+                            AnimatedVisibility(
+                                visible = areBarsVisible,
+                                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
                             ) {
-                                AddressBar(
-                                    url = currentTab?.url ?: "omni://home",
-                                    isLoading = currentTab?.isLoading == true,
-                                    progress = currentTab?.progress ?: 0,
-                                    blockedCount = currentTab?.blockedCount ?: 0,
-                                    onUrlSubmit = { browserViewModel.loadUrlInActiveTab(it) },
-                                    onReload = { browserViewModel.reloadActiveTab() },
-                                    onStop = { browserViewModel.stopLoadingActiveTab() },
-                                    onShieldClick = {
-                                        Toast.makeText(context, "Shield blocked ${currentTab?.blockedCount ?: 0} elements on this page. (Total Session Blocks: $totalAdsBlocked ads, $totalTrackersBlocked trackers, $totalPopupsBlocked popups).", Toast.LENGTH_LONG).show()
-                                    },
-                                    customDnsUrl = customDnsUrl
-                                )
+                                Surface(
+                                    modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                                    color = MaterialTheme.colorScheme.surface
+                                ) {
+                                    AddressBar(
+                                        url = currentTab?.url ?: "omni://home",
+                                        isLoading = currentTab?.isLoading == true,
+                                        progress = currentTab?.progress ?: 0,
+                                        blockedCount = currentTab?.blockedCount ?: 0,
+                                        onUrlSubmit = { browserViewModel.loadUrlInActiveTab(it) },
+                                        onReload = { browserViewModel.reloadActiveTab() },
+                                        onStop = { browserViewModel.stopLoadingActiveTab() },
+                                        onShieldClick = {
+                                            Toast.makeText(context, "Shield blocked ${currentTab?.blockedCount ?: 0} elements on this page. (Total Session Blocks: $totalAdsBlocked ads, $totalTrackersBlocked trackers, $totalPopupsBlocked popups).", Toast.LENGTH_LONG).show()
+                                        },
+                                        customDnsUrl = customDnsUrl,
+                                        isPrivate = currentTab?.isPrivate == true
+                                    )
+                                }
                             }
                         }
                     },
                     bottomBar = {
                         if (currentScreen == BrowserScreenType.BROWSER) {
-                            NavigationToolbar(
-                                canGoBack = currentTab?.canGoBack == true,
-                                canGoForward = currentTab?.canGoForward == true,
-                                tabCount = tabs.size,
-                                onBack = { browserViewModel.goBackInActiveTab() },
-                                onForward = { browserViewModel.goForwardInActiveTab() },
-                                onHome = { browserViewModel.loadUrlInActiveTab("omni://home") },
-                                onTabsClick = {
-                                    browserViewModel.tabManager.captureActiveTabThumbnail()
-                                    currentScreen = BrowserScreenType.TABS
-                                },
-                                onMenuClick = { showMenu = true }
-                            )
+                            AnimatedVisibility(
+                                visible = areBarsVisible || showMenu,
+                                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                            ) {
+                                NavigationToolbar(
+                                    canGoBack = currentTab?.canGoBack == true,
+                                    canGoForward = currentTab?.canGoForward == true,
+                                    tabCount = tabs.size,
+                                    onBack = { browserViewModel.goBackInActiveTab() },
+                                    onForward = { browserViewModel.goForwardInActiveTab() },
+                                    onHome = { browserViewModel.loadUrlInActiveTab("omni://home") },
+                                    onTabsClick = {
+                                        browserViewModel.tabManager.captureActiveTabThumbnail()
+                                        currentScreen = BrowserScreenType.TABS
+                                    },
+                                    onMenuClick = { showMenu = true }
+                                )
+                            }
 
                             // Menu options
                             DropdownMenu(
                                 expanded = showMenu,
                                 onDismissRequest = { showMenu = false }
                             ) {
+                                DropdownMenuItem(
+                                    text = { Text("New Incognito Tab") },
+                                    onClick = {
+                                        showMenu = false
+                                        browserViewModel.createNewTab("omni://home", isPrivate = true)
+                                        Toast.makeText(context, "Opened Incognito Tab", Toast.LENGTH_SHORT).show()
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.VisibilityOff, null) }
+                                )
                                 DropdownMenuItem(
                                     text = { Text("Bookmarks") },
                                     onClick = {
@@ -294,7 +332,22 @@ class MainActivity : ComponentActivity() {
                                         progress = currentTab!!.progress,
                                         isPrivate = currentTab!!.isPrivate,
                                         browserEngine = container.browserEngine,
-                                        tabManager = container.tabManager
+                                        tabManager = container.tabManager,
+                                        onScrollChanged = { scrollY, oldScrollY ->
+                                            if (scrollY == 0) {
+                                                if (!areBarsVisible) {
+                                                    areBarsVisible = true
+                                                }
+                                            } else if (scrollY > oldScrollY + 5) {
+                                                if (areBarsVisible) {
+                                                    areBarsVisible = false
+                                                }
+                                            } else if (scrollY < oldScrollY - 5) {
+                                                if (!areBarsVisible) {
+                                                    areBarsVisible = true
+                                                }
+                                            }
+                                        }
                                     )
                                 }
                             }

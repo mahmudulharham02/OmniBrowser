@@ -40,6 +40,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -71,15 +76,26 @@ fun HomeScreen(
     onNavigateTo: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
-    val shortcuts = remember {
-        mutableStateListOf(
-            "Google" to "https://www.google.com",
-            "DuckDuckGo" to "https://www.duckduckgo.com",
-            "GitHub" to "https://github.com",
-            "Wikipedia" to "https://www.wikipedia.org"
+    
+    var shortcutsList by remember {
+        mutableStateOf(ShortcutStorage.loadShortcuts(context))
+    }
+
+    val sortedShortcuts = remember(shortcutsList) {
+        shortcutsList.sortedWith(
+            compareByDescending<ShortcutItem> { it.isPinned }
+                .thenBy { it.title.lowercase() }
         )
     }
+
+    var showManageShortcutsDialog by remember { mutableStateOf(false) }
+    var showAddDirectDialog by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editingShortcut by remember { mutableStateOf<ShortcutItem?>(null) }
+    var editName by remember { mutableStateOf("") }
+    var editUrl by remember { mutableStateOf("") }
 
     Box(
         modifier = modifier
@@ -138,6 +154,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(40.dp))
 
+
             // Centered Search Input Box
             OutlinedTextField(
                 value = searchQuery,
@@ -157,6 +174,19 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp)
+                    .onKeyEvent { keyEvent ->
+                        if (keyEvent.type == KeyEventType.KeyUp && 
+                            (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
+                            if (searchQuery.trim().isNotEmpty()) {
+                                onSearch(searchQuery)
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
                     .testTag("home_search_input"),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -246,25 +276,342 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Quick Shortcuts Grid
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(4),
+            // Shortcuts Header Row
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(100.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalArrangement = Arrangement.Center
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(shortcuts) { (title, url) ->
-                    ShortcutTile(
-                        title = title,
-                        url = url,
-                        onClick = { onNavigateTo(url) },
-                        onDelete = { shortcuts.remove(title to url) }
+                Text(
+                    text = "Quick Shortcuts",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { 
+                        editingShortcut = null
+                        editName = ""
+                        editUrl = ""
+                        showAddDirectDialog = true 
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add Shortcut",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(onClick = { showManageShortcutsDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Manage Shortcuts",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Quick Shortcuts Grid (Chunked Rows)
+            if (sortedShortcuts.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No shortcuts added yet. Tap '+' to add one!",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
+                }
+            } else {
+                val chunkedShortcuts = sortedShortcuts.chunked(4)
+                chunkedShortcuts.forEach { rowItems ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        rowItems.forEach { item ->
+                            ShortcutTile(
+                                title = item.title,
+                                url = item.url,
+                                isPinned = item.isPinned,
+                                onClick = { onNavigateTo(item.url) },
+                                onDelete = {
+                                    val updated = shortcutsList.filter { it.url != item.url }
+                                    shortcutsList = updated
+                                    ShortcutStorage.saveShortcuts(context, updated)
+                                },
+                                onEdit = {
+                                    editingShortcut = item
+                                    editName = item.title
+                                    editUrl = item.url
+                                    showEditDialog = true
+                                },
+                                onTogglePin = {
+                                    val updated = shortcutsList.map {
+                                        if (it.url == item.url) it.copy(isPinned = !it.isPinned) else it
+                                    }
+                                    shortcutsList = updated
+                                    ShortcutStorage.saveShortcuts(context, updated)
+                                }
+                            )
+                        }
+                        // Pad empty spots in the row to keep alignment consistent
+                        repeat(4 - rowItems.size) {
+                            Spacer(modifier = Modifier.width(72.dp).padding(8.dp))
+                        }
+                    }
                 }
             }
         }
+    }
+
+    // Direct Add Shortcut Dialog
+    if (showAddDirectDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddDirectDialog = false },
+            title = { Text("Add New Shortcut") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editName,
+                        onValueChange = { editName = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editUrl,
+                        onValueChange = { editUrl = it },
+                        label = { Text("URL") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editName.isNotBlank() && editUrl.isNotBlank()) {
+                            var finalUrl = editUrl.trim()
+                            if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+                                finalUrl = "https://$finalUrl"
+                            }
+                            val updated = shortcutsList + ShortcutItem(editName, finalUrl)
+                            shortcutsList = updated
+                            ShortcutStorage.saveShortcuts(context, updated)
+                            showAddDirectDialog = false
+                        }
+                    }
+                ) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDirectDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Direct Edit Shortcut Dialog
+    if (showEditDialog && editingShortcut != null) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Edit Shortcut") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editName,
+                        onValueChange = { editName = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editUrl,
+                        onValueChange = { editUrl = it },
+                        label = { Text("URL") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editName.isNotBlank() && editUrl.isNotBlank()) {
+                            var finalUrl = editUrl.trim()
+                            if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+                                finalUrl = "https://$finalUrl"
+                            }
+                            val updated = shortcutsList.map {
+                                if (it.url == editingShortcut!!.url) {
+                                    ShortcutItem(editName, finalUrl, it.isPinned)
+                                } else it
+                            }
+                            shortcutsList = updated
+                            ShortcutStorage.saveShortcuts(context, updated)
+                            showEditDialog = false
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Manage Shortcuts Dialog
+    if (showManageShortcutsDialog) {
+        AlertDialog(
+            onDismissRequest = { showManageShortcutsDialog = false },
+            title = { Text("Manage Shortcuts") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                ) {
+                    // Quick add form
+                    Text(
+                        text = "Add Shortcut",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = editName,
+                            onValueChange = { editName = it },
+                            placeholder = { Text("Name") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = editUrl,
+                            onValueChange = { editUrl = it },
+                            placeholder = { Text("URL") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1.5f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            if (editName.isNotBlank() && editUrl.isNotBlank()) {
+                                var finalUrl = editUrl.trim()
+                                if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+                                    finalUrl = "https://$finalUrl"
+                                }
+                                val updated = shortcutsList + ShortcutItem(editName, finalUrl)
+                                shortcutsList = updated
+                                ShortcutStorage.saveShortcuts(context, updated)
+                                editName = ""
+                                editUrl = ""
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Add")
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                    Text(
+                        text = "Saved Shortcuts",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    LazyColumn(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        items(shortcutsList) { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PushPin,
+                                    contentDescription = "Pin Status",
+                                    tint = if (item.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                    modifier = Modifier
+                                        .clickable {
+                                            val updated = shortcutsList.map {
+                                                if (it.url == item.url) it.copy(isPinned = !it.isPinned) else it
+                                            }
+                                            shortcutsList = updated
+                                            ShortcutStorage.saveShortcuts(context, updated)
+                                        }
+                                        .padding(8.dp)
+                                        .size(20.dp)
+                                )
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(start = 4.dp)
+                                ) {
+                                    Text(item.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                    Text(item.url, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                IconButton(
+                                    onClick = {
+                                        editingShortcut = item
+                                        editName = item.title
+                                        editUrl = item.url
+                                        showEditDialog = true
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
+                                }
+                                IconButton(
+                                    onClick = {
+                                        val updated = shortcutsList.filter { it.url != item.url }
+                                        shortcutsList = updated
+                                        ShortcutStorage.saveShortcuts(context, updated)
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showManageShortcutsDialog = false
+                    }
+                ) {
+                    Text("Done")
+                }
+            }
+        )
     }
 }
 
@@ -277,7 +624,8 @@ fun BrowserScreen(
     isPrivate: Boolean,
     browserEngine: BrowserEngine,
     tabManager: TabManager,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onScrollChanged: ((scrollY: Int, oldScrollY: Int) -> Unit)? = null
 ) {
     val webView = remember(tabId) {
         val wv = tabManager.getWebViewForTab(tabId)
@@ -285,6 +633,15 @@ fun BrowserScreen(
             browserEngine.setupWebView(wv, tabId, isPrivate)
         }
         wv
+    }
+
+    DisposableEffect(webView) {
+        webView?.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            onScrollChanged?.invoke(scrollY, oldScrollY)
+        }
+        onDispose {
+            webView?.setOnScrollChangeListener(null)
+        }
     }
 
     // Capture standard system back actions to navigate WebView history backwards
@@ -477,19 +834,25 @@ fun BookmarksScreen(
                     .padding(horizontal = 8.dp)
             ) {
                 items(bookmarks) { bookmark ->
-                    ListItem(
-                        headlineContent = { Text(bookmark.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold) },
-                        supportingContent = { Text(bookmark.url, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall) },
-                        leadingContent = { Icon(Icons.Default.Bookmark, "Bookmark Icon", tint = MaterialTheme.colorScheme.primary) },
-                        trailingContent = {
-                            IconButton(onClick = { onDeleteBookmark(bookmark.url) }) {
-                                Icon(Icons.Default.Delete, "Delete Bookmark", tint = MaterialTheme.colorScheme.error)
-                            }
-                        },
+                    Surface(
                         modifier = Modifier
+                            .fillMaxWidth()
                             .clickable { onSelectBookmark(bookmark.url) }
-                            .padding(vertical = 4.dp)
-                    )
+                            .padding(vertical = 2.dp),
+                        color = Color.Transparent
+                    ) {
+                        ListItem(
+                            headlineContent = { Text(bookmark.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold) },
+                            supportingContent = { Text(bookmark.url, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall) },
+                            leadingContent = { Icon(Icons.Default.Bookmark, "Bookmark Icon", tint = MaterialTheme.colorScheme.primary) },
+                            trailingContent = {
+                                IconButton(onClick = { onDeleteBookmark(bookmark.url) }) {
+                                    Icon(Icons.Default.Delete, "Delete Bookmark", tint = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                        )
+                    }
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                 }
             }
@@ -553,24 +916,30 @@ fun HistoryScreen(
                     .padding(horizontal = 8.dp)
             ) {
                 items(history) { record ->
-                    ListItem(
-                        headlineContent = { Text(record.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold) },
-                        supportingContent = {
-                            Column {
-                                Text(record.url, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                                Text(formatter.format(Date(record.lastVisitEpoch)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                            }
-                        },
-                        leadingContent = { Icon(Icons.Default.History, "History Icon", tint = MaterialTheme.colorScheme.primary) },
-                        trailingContent = {
-                            IconButton(onClick = { onDeleteHistory(record.id) }) {
-                                Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
-                            }
-                        },
+                    Surface(
                         modifier = Modifier
+                            .fillMaxWidth()
                             .clickable { onSelectHistory(record.url) }
-                            .padding(vertical = 4.dp)
-                    )
+                            .padding(vertical = 2.dp),
+                        color = Color.Transparent
+                    ) {
+                        ListItem(
+                            headlineContent = { Text(record.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold) },
+                            supportingContent = {
+                                Column {
+                                    Text(record.url, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                                    Text(formatter.format(Date(record.lastVisitEpoch)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                }
+                            },
+                            leadingContent = { Icon(Icons.Default.History, "History Icon", tint = MaterialTheme.colorScheme.primary) },
+                            trailingContent = {
+                                IconButton(onClick = { onDeleteHistory(record.id) }) {
+                                    Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                        )
+                    }
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                 }
             }

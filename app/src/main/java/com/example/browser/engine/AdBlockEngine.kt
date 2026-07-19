@@ -144,20 +144,24 @@ class AdBlockEngine(private val settingsDataStore: SettingsDataStore) {
 
     fun recordBlock(category: BlockCategory, tabId: String? = null, tabManager: TabManager? = null) {
         coroutineScope.launch {
+            val isPrivate = if (tabId != null && tabManager != null) {
+                tabManager.tabs.value.find { it.id == tabId }?.isPrivate == true
+            } else false
+
             when (category) {
                 BlockCategory.AD -> {
-                    settingsDataStore.incrementAdsBlocked()
+                    if (!isPrivate) settingsDataStore.incrementAdsBlocked()
                     _statsFlow.update { it.copy(adsBlocked = it.adsBlocked + 1) }
                 }
                 BlockCategory.TRACKER -> {
-                    settingsDataStore.incrementTrackersBlocked()
+                    if (!isPrivate) settingsDataStore.incrementTrackersBlocked()
                     _statsFlow.update { it.copy(trackersBlocked = it.trackersBlocked + 1) }
                 }
                 BlockCategory.POPUP -> {
-                    settingsDataStore.incrementPopupsBlocked()
+                    if (!isPrivate) settingsDataStore.incrementPopupsBlocked()
                 }
                 BlockCategory.MALWARE -> {
-                    settingsDataStore.incrementAdsBlocked()
+                    if (!isPrivate) settingsDataStore.incrementAdsBlocked()
                     _statsFlow.update { it.copy(adsBlocked = it.adsBlocked + 1) }
                 }
             }

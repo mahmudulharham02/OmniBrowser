@@ -63,24 +63,32 @@ class BrowserViewModel(
     }
 
     fun loadUrlInActiveTab(url: String) {
-        val activeId = activeTabId.value ?: return
-        
         // Check if query or URL
         var destination = url.trim()
         if (!destination.contains(".") && !destination.startsWith("omni://") && !destination.contains("://")) {
-            // Search query
-            destination = searchEngineUrl.value + destination
+            // Search query - URL encode the query
+            try {
+                val encodedQuery = java.net.URLEncoder.encode(destination, "UTF-8")
+                destination = searchEngineUrl.value + encodedQuery
+            } catch (e: Exception) {
+                destination = searchEngineUrl.value + destination
+            }
         } else if (!destination.contains("://")) {
             destination = "https://" + destination
         }
 
-        tabManager.updateTab(activeId) {
-            it.copy(url = destination, title = "Loading...")
-        }
+        val activeId = activeTabId.value
+        if (activeId == null) {
+            createNewTab(destination)
+        } else {
+            tabManager.updateTab(activeId) {
+                it.copy(url = destination, title = "Loading...")
+            }
 
-        val wv = tabManager.getWebViewForTab(activeId)
-        wv?.post {
-            wv.loadUrl(destination)
+            val wv = tabManager.getWebViewForTab(activeId)
+            wv?.post {
+                wv.loadUrl(destination)
+            }
         }
     }
 

@@ -77,10 +77,17 @@ class TabManager(private val webViewFactory: TabWebViewFactory) {
     fun closeTab(id: String) {
         val tabToClose = _tabs.value.find { it.id == id } ?: return
         
-        // Keep in recently closed tabs (max 10)
-        recentlyClosedTabs.add(0, tabToClose)
-        if (recentlyClosedTabs.size > 10) {
-            recentlyClosedTabs.removeAt(recentlyClosedTabs.lastIndex)
+        // Keep in recently closed tabs (max 10) if not private
+        if (!tabToClose.isPrivate) {
+            recentlyClosedTabs.add(0, tabToClose)
+            if (recentlyClosedTabs.size > 10) {
+                recentlyClosedTabs.removeAt(recentlyClosedTabs.lastIndex)
+            }
+        } else {
+            // Private tab - clear cookies upon closing
+            android.webkit.CookieManager.getInstance().removeAllCookies {
+                // Cookies cleared
+            }
         }
 
         // Recycle WebView

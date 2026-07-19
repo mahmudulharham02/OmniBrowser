@@ -24,6 +24,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
@@ -50,7 +55,8 @@ fun AddressBar(
     onStop: () -> Unit,
     onShieldClick: () -> Unit,
     modifier: Modifier = Modifier,
-    customDnsUrl: String = ""
+    customDnsUrl: String = "",
+    isPrivate: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var textFieldValue by remember {
@@ -68,6 +74,7 @@ fun AddressBar(
             selection = if (isFocused) TextRange(0, newText.length) else TextRange.Zero
         )
     }
+
     val isHttps = url.startsWith("https://")
     val isLocal = url.startsWith("omni://")
 
@@ -75,9 +82,10 @@ fun AddressBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .padding(horizontal = 8.dp, vertical = 2.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
-                .padding(horizontal = 12.dp, vertical = 2.dp),
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .heightIn(min = 36.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // HTTPS / HTTP Indicator Icon
@@ -100,6 +108,16 @@ fun AddressBar(
                         onClick = {}
                     )
             )
+
+            if (isPrivate) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.Default.VisibilityOff,
+                    contentDescription = "Private Tab",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.width(8.dp))
 
@@ -168,10 +186,26 @@ fun AddressBar(
                         }
                         isFocused = focusState.isFocused
                     }
+                    .onKeyEvent { keyEvent ->
+                        if (keyEvent.type == KeyEventType.KeyUp && 
+                            (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
+                            val input = textFieldValue.text
+                            if (input.trim().isNotEmpty()) {
+                                onUrlSubmit(input)
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
                     .testTag("url_input"),
                 decorationBox = { innerTextField ->
                     Box(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
                         contentAlignment = Alignment.CenterStart
                     ) {
                         if (textFieldValue.text.isEmpty()) {
@@ -430,8 +464,11 @@ fun TabCard(
 fun ShortcutTile(
     title: String,
     url: String,
+    isPinned: Boolean,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onEdit: () -> Unit,
+    onTogglePin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -457,6 +494,28 @@ fun ShortcutTile(
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
+                if (isPinned) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(2.dp),
+                        contentAlignment = Alignment.TopEnd
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PushPin,
+                                contentDescription = "Pinned",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -473,12 +532,28 @@ fun ShortcutTile(
             onDismissRequest = { showMenu = false }
         ) {
             DropdownMenuItem(
-                text = { Text("Delete Shortcut") },
+                text = { Text(if (isPinned) "Unpin" else "Pin") },
+                onClick = {
+                    showMenu = false
+                    onTogglePin()
+                },
+                leadingIcon = { Icon(Icons.Default.PushPin, null) }
+            )
+            DropdownMenuItem(
+                text = { Text("Edit") },
+                onClick = {
+                    showMenu = false
+                    onEdit()
+                },
+                leadingIcon = { Icon(Icons.Default.Edit, null) }
+            )
+            DropdownMenuItem(
+                text = { Text("Delete") },
                 onClick = {
                     showMenu = false
                     onDelete()
                 },
-                leadingIcon = { Icon(Icons.Default.Delete, null) }
+                leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
             )
         }
     }

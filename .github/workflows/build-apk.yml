@@ -9,23 +9,10 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: 'Build type (release or debug)'
-        required: true
-        default: 'release'
-        type: choice
-        options:
-          - release
-          - debug
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - name: Checkout code
@@ -36,12 +23,23 @@ jobs:
         with:
           java-version: '11'
           distribution: 'temurin'
-          cache: gradle
 
-      - name: Setup Gradle (with wrapper)
-        uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: wrapper
+      - name: Generate Gradle Wrapper (if missing)
+        run: |
+          if [ ! -f "gradlew" ]; then
+            echo "Generating Gradle wrapper..."
+            gradle wrapper --gradle-version 8.8
+            git config --global user.name "GitHub Actions"
+            git config --global user.email "actions@github.com"
+            git add gradle* .gitignore
+            git commit -m "Add Gradle wrapper files" || true
+            git push || true
+          else
+            echo "Gradle wrapper already exists"
+          fi
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
 
       - name: Generate Release Keystore
         run: |
@@ -55,20 +53,27 @@ jobs:
             -validity 10000 \
             -alias omnikey \
             -dname "CN=OmniBrowser,O=OmniBrowser,C=US"
-          ls -la keystore/
+
+      - name: List files to debug
+        run: |
+          echo "=== Root files ==="
+          ls -la
+          echo "=== Gradle wrapper ==="
+          ls -la gradle/wrapper/ 2>/dev/null || echo "Wrapper directory not found"
 
       - name: Build Release APK
         run: |
           ./gradlew --version
-          ./gradlew assembleRelease --stacktrace --info
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/keystore/release.keystore
-          STORE_PASSWORD: omnibrowser123
-          KEY_PASSWORD: omnibrowser123
+          ./gradlew assembleRelease \
+            -PKEYSTORE_PATH="$(pwd)/keystore/release.keystore" \
+            -PSTORE_PASSWORD="omnibrowser123" \
+            -PKEY_PASSWORD="omnibrowser123" \
+            --stacktrace --info
+        if: github.event_name != 'pull_request'
 
       - name: Build Debug APK (on PR)
-        if: github.event_name == 'pull_request'
         run: ./gradlew assembleDebug --stacktrace --info
+        if: github.event_name == 'pull_request'
 
       - name: Upload APK Artifacts
         if: always()
@@ -77,11 +82,12 @@ jobs:
           name: OmniBrowser-APK-${{ github.run_number }}
           path: app/build/outputs/apk/
           retention-days: 30
-          if-no-files-found: ignore
 
       - name: Build Report
         if: always()
         run: |
-          echo "## Build Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 📱 Build Report" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "**Run:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          find app/build/outputs/apk/ -name "*.apk" -type f -exec ls -lh {} \; 2>/dev/null || echo "No APKs found"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          find app/build/outputs/apk/ -name "*.apk" -type f -exec sh -c 'echo "✅ $(basename {}): $(du -h {} | cut -f1)"' \; 2>/dev/null || echo "⚠️ No APKs built"

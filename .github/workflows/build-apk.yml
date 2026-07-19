@@ -44,7 +44,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v3
 
-      - name: Generate Debug Keystore
+      - name: Generate Debug Keystore (Default)
         run: |
           mkdir -p keystore
           keytool -genkey -v \
@@ -56,7 +56,7 @@ jobs:
             -validity 10000 \
             -alias androiddebugkey \
             -dname "CN=OmniBrowser Debug, OU=Development, O=OmniBrowser, L=Earth, ST=State, C=US"
-          echo "✅ Debug keystore generated"
+          echo "Debug keystore generated"
           
       - name: Generate Release Keystore
         run: |
@@ -70,18 +70,19 @@ jobs:
             -validity 10000 \
             -alias omnikey \
             -dname "CN=OmniBrowser Release, OU=Production, O=OmniBrowser, L=Earth, ST=State, C=US"
-          echo "✅ Release keystore generated"
+          echo "Release keystore generated"
 
       - name: Set signing environment variables
         run: |
           echo "KEYSTORE_PATH=$(pwd)/keystore/release.keystore" >> $GITHUB_ENV
           echo "STORE_PASSWORD=omnibrowser123" >> $GITHUB_ENV
           echo "KEY_PASSWORD=omnibrowser123" >> $GITHUB_ENV
-          echo "✅ Signing config ready"
+          echo "Signing config ready for release builds"
 
       - name: Create local.properties
         run: |
           echo "sdk.dir=${ANDROID_HOME}" > local.properties
+          cat local.properties
 
       - name: Build Release APK (Signed)
         run: |
@@ -101,9 +102,12 @@ jobs:
         run: |
           APK_PATH="app/build/outputs/apk/release/app-release.apk"
           if [ -f "$APK_PATH" ]; then
-            echo "🔍 Verifying APK signature..."
+            echo "Verifying APK signature..."
             jarsigner -verify -verbose -certs "$APK_PATH"
-            echo "✅ APK signature verified!"
+            echo "✅ APK signature verified successfully!"
+          else
+            echo "APK not found at $APK_PATH"
+            find app/build/outputs/apk -name "*.apk" -type f
           fi
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'release')
 
@@ -120,6 +124,14 @@ jobs:
             echo "✅ APK aligned and optimized"
           fi
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'release')
+
+      - name: Get APK Info
+        run: |
+          if [ -f "app/build/outputs/apk/release/optimized/app-release-optimized.apk" ]; then
+            SIZE=$(du -h app/build/outputs/apk/release/optimized/app-release-optimized.apk | cut -f1)
+            echo "APK_SIZE=$SIZE" >> $GITHUB_ENV
+            echo "APK_PATH=app/build/outputs/apk/release/optimized/app-release-optimized.apk" >> $GITHUB_ENV
+          fi
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
@@ -139,19 +151,27 @@ jobs:
           draft: false
           prerelease: false
           body: |
-            ## OmniBrowser Release ${{ github.ref_name }}
+            ## OmniBrowser Release Build
             
-            **Build:** ${{ github.run_number }} | **Commit:** ${{ github.sha }}
+            **Build Information:**
+            - **Build Number:** ${{ github.run_number }}
+            - **Commit:** ${{ github.sha }}
+            - **Tag:** ${{ github.ref_name }}
+            - **Date:** ${{ github.event.head_commit.timestamp }}
             
             **APK Specifications:**
-            - Type: Release (Signed & Optimized)
-            - Min SDK: 24 | Target SDK: 36
-            - Package: com.aistudio.omnibrowser.pwkvdg
+            - **Type:** Release (Signed & Optimized)
+            - **Min SDK:** 24
+            - **Target SDK:** 36
+            - **Package:** com.aistudio.omnibrowser.pwkvdg
+            - **Size:** ${{ env.APK_SIZE }}
             
-            **Install:**
+            **Installation:**
             ```bash
             adb install -r app-release-optimized.apk
             ```
+            
+            Or enable "Unknown Sources" in device settings and tap the APK file to install directly.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -159,16 +179,45 @@ jobs:
         if: always()
         run: |
           echo "## 📱 OmniBrowser Build Report" >> $GITHUB_STEP_SUMMARY
-          echo "**Build:** ${{ job.status }} | **Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.ref_name }} | **Event:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch/Tag:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered By:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Outputs:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ -f "app/build/outputs/apk/release/optimized/app-release-optimized.apk" ]; then
             SIZE=$(du -h app/build/outputs/apk/release/optimized/app-release-optimized.apk | cut -f1)
-            echo "✅ **Release APK** - $SIZE (Signed & Optimized)" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Release APK** - Size: $SIZE" >> $GITHUB_STEP_SUMMARY
+            echo "   - Signed with generated certificate" >> $GITHUB_STEP_SUMMARY
+            echo "   - Optimized with zipalign" >> $GITHUB_STEP_SUMMARY
+            echo "   - Ready for installation" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
           if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
             SIZE=$(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)
-            echo "✅ **Debug APK** - $SIZE" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Debug APK** - Size: $SIZE" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
           fi
+          
+          echo "### How to Download:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to **Actions** tab" >> $GITHUB_STEP_SUMMARY
+          echo "2. Click latest **Build Signed APK** run" >> $GITHUB_STEP_SUMMARY
+          echo "3. Download from **Artifacts**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### How to Install:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**On Android Device:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Enable \"Unknown Sources\" in Settings" >> $GITHUB_STEP_SUMMARY
+          echo "- Transfer APK to device" >> $GITHUB_STEP_SUMMARY
+          echo "- Tap APK file and install" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Via ADB (if developer mode enabled):**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "adb install -r app-release-optimized.apk" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

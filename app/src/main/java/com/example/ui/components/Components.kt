@@ -10,8 +10,13 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -47,7 +52,22 @@ fun AddressBar(
     modifier: Modifier = Modifier,
     customDnsUrl: String = ""
 ) {
-    var textState by remember(url) { mutableStateOf(if (url == "omni://home") "" else url) }
+    var isFocused by remember { mutableStateOf(false) }
+    var textFieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = if (url == "omni://home") "" else url,
+                selection = TextRange.Zero
+            )
+        )
+    }
+    LaunchedEffect(url) {
+        val newText = if (url == "omni://home") "" else url
+        textFieldValue = TextFieldValue(
+            text = newText,
+            selection = if (isFocused) TextRange(0, newText.length) else TextRange.Zero
+        )
+    }
     val isHttps = url.startsWith("https://")
     val isLocal = url.startsWith("omni://")
 
@@ -55,9 +75,9 @@ fun AddressBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(24.dp))
-                .padding(horizontal = 12.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
+                .padding(horizontal = 12.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // HTTPS / HTTP Indicator Icon
@@ -117,32 +137,53 @@ fun AddressBar(
             }
 
             // Text Input Field
-            TextField(
-                value = textState,
-                onValueChange = { textState = it },
-                placeholder = { Text("Search or type URL", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
+            BasicTextField(
+                value = textFieldValue,
+                onValueChange = { textFieldValue = it },
                 singleLine = true,
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 ),
                 keyboardOptions = KeyboardOptions(
                     imeAction = ImeAction.Search
                 ),
                 keyboardActions = KeyboardActions(
                     onSearch = {
-                        if (textState.trim().isNotEmpty()) {
-                            onUrlSubmit(textState)
+                        val input = textFieldValue.text
+                        if (input.trim().isNotEmpty()) {
+                            onUrlSubmit(input)
                         }
                     }
                 ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier
                     .weight(1f)
-                    .height(48.dp)
-                    .testTag("url_input")
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused && !isFocused) {
+                            if (textFieldValue.text.isNotEmpty()) {
+                                textFieldValue = textFieldValue.copy(
+                                    selection = TextRange(0, textFieldValue.text.length)
+                                )
+                            }
+                        }
+                        isFocused = focusState.isFocused
+                    }
+                    .testTag("url_input"),
+                decorationBox = { innerTextField ->
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (textFieldValue.text.isEmpty()) {
+                            Text(
+                                text = "Search or type URL",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
             )
 
             // Shield blocked items counter

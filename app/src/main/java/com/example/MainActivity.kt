@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val container = (application as BrowserApplication).container
 
@@ -59,6 +59,22 @@ class MainActivity : ComponentActivity() {
                 val extensionsViewModel = remember { ViewModelProvider(this@MainActivity, factory)[ExtensionsViewModel::class.java] }
                 val catalogViewModel = remember { ViewModelProvider(this@MainActivity, factory)[CatalogViewModel::class.java] }
                 val settingsViewModel = remember { ViewModelProvider(this@MainActivity, factory)[SettingsViewModel::class.java] }
+
+                val hideNavBar = settingsViewModel.hideNavBar.collectAsState().value
+                DisposableEffect(hideNavBar) {
+                    val activity = context as? android.app.Activity
+                    if (activity != null) {
+                        val window = activity.window
+                        val controller = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+                        if (hideNavBar) {
+                            controller.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+                            controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        } else {
+                            controller.show(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+                        }
+                    }
+                    onDispose { }
+                }
 
                 // Ensure at least one tab is created on startup
                 LaunchedEffect(Unit) {
@@ -144,19 +160,24 @@ class MainActivity : ComponentActivity() {
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
                         if (currentScreen == BrowserScreenType.BROWSER) {
-                            AddressBar(
-                                url = currentTab?.url ?: "omni://home",
-                                isLoading = currentTab?.isLoading == true,
-                                progress = currentTab?.progress ?: 0,
-                                blockedCount = currentTab?.blockedCount ?: 0,
-                                onUrlSubmit = { browserViewModel.loadUrlInActiveTab(it) },
-                                onReload = { browserViewModel.reloadActiveTab() },
-                                onStop = { browserViewModel.stopLoadingActiveTab() },
-                                onShieldClick = {
-                                    Toast.makeText(context, "Shield blocked ${currentTab?.blockedCount ?: 0} elements on this page. (Total Session Blocks: $totalAdsBlocked ads, $totalTrackersBlocked trackers, $totalPopupsBlocked popups).", Toast.LENGTH_LONG).show()
-                                },
-                                customDnsUrl = customDnsUrl
-                            )
+                            Surface(
+                                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                                color = MaterialTheme.colorScheme.surface
+                            ) {
+                                AddressBar(
+                                    url = currentTab?.url ?: "omni://home",
+                                    isLoading = currentTab?.isLoading == true,
+                                    progress = currentTab?.progress ?: 0,
+                                    blockedCount = currentTab?.blockedCount ?: 0,
+                                    onUrlSubmit = { browserViewModel.loadUrlInActiveTab(it) },
+                                    onReload = { browserViewModel.reloadActiveTab() },
+                                    onStop = { browserViewModel.stopLoadingActiveTab() },
+                                    onShieldClick = {
+                                        Toast.makeText(context, "Shield blocked ${currentTab?.blockedCount ?: 0} elements on this page. (Total Session Blocks: $totalAdsBlocked ads, $totalTrackersBlocked trackers, $totalPopupsBlocked popups).", Toast.LENGTH_LONG).show()
+                                    },
+                                    customDnsUrl = customDnsUrl
+                                )
+                            }
                         }
                     },
                     bottomBar = {

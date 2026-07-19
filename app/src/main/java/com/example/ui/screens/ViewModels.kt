@@ -280,6 +280,7 @@ class SettingsViewModel(val settingsDataStore: SettingsDataStore) : ViewModel() 
     val darkModeEnabled = settingsDataStore.darkModeEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val customDnsUrl = settingsDataStore.customDnsUrl.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val restoreTabsOnStartup = settingsDataStore.restoreTabsOnStartup.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val hideNavBar = settingsDataStore.hideNavBar.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
  
     fun setSearchEngineUrl(url: String) = viewModelScope.launch { settingsDataStore.setSearchEngineUrl(url) }
     fun setHomePage(url: String) = viewModelScope.launch { settingsDataStore.setHomePage(url) }
@@ -299,6 +300,7 @@ class SettingsViewModel(val settingsDataStore: SettingsDataStore) : ViewModel() 
     fun setDarkModeEnabled(enabled: Boolean) = viewModelScope.launch { settingsDataStore.setDarkModeEnabled(enabled) }
     fun setCustomDnsUrl(url: String) = viewModelScope.launch { settingsDataStore.setCustomDnsUrl(url) }
     fun setRestoreTabsOnStartup(enabled: Boolean) = viewModelScope.launch { settingsDataStore.setRestoreTabsOnStartup(enabled) }
+    fun setHideNavBar(enabled: Boolean) = viewModelScope.launch { settingsDataStore.setHideNavBar(enabled) }
 }
 
 // Custom factories for ViewModel creation using AppContainer

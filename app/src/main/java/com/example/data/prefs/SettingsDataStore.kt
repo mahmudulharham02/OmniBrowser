@@ -38,6 +38,15 @@ class SettingsDataStore(private val context: Context) {
         val DARK_MODE_ENABLED = booleanPreferencesKey("dark_mode_enabled")
         val CUSTOM_DNS_URL = stringPreferencesKey("custom_dns_url")
         val RESTORE_TABS_ON_STARTUP = booleanPreferencesKey("restore_tabs_on_startup")
+        val HIDE_NAV_BAR = booleanPreferencesKey("hide_nav_bar")
+    }
+
+    val hideNavBar: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+        preferences[HIDE_NAV_BAR] ?: false
+    }
+
+    suspend fun setHideNavBar(enabled: Boolean) {
+        context.settingsDataStore.edit { it[HIDE_NAV_BAR] = enabled }
     }
 
     val restoreTabsOnStartup: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->

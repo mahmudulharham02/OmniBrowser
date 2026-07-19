@@ -39,6 +39,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -83,6 +84,7 @@ fun HomeScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
@@ -342,22 +344,27 @@ fun TabSwitcherScreen(
 ) {
     Scaffold(
         topBar = {
-            OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title = { Text("Active Tabs (${tabs.size})", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, null)
-                    }
-                },
-                actions = {
-                    if (tabs.isNotEmpty()) {
-                        TextButton(onClick = onCloseAll) {
-                            Text("CLOSE ALL", color = MaterialTheme.colorScheme.error)
+            Surface(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                OptIn(ExperimentalMaterial3Api::class)
+                TopAppBar(
+                    title = { Text("Active Tabs (${tabs.size})", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, null)
+                        }
+                    },
+                    actions = {
+                        if (tabs.isNotEmpty()) {
+                            TextButton(onClick = onCloseAll) {
+                                Text("CLOSE ALL", color = MaterialTheme.colorScheme.error)
+                            }
                         }
                     }
-                }
-            )
+                )
+            }
         },
         floatingActionButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -433,15 +440,20 @@ fun BookmarksScreen(
 ) {
     Scaffold(
         topBar = {
-            OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title = { Text("Bookmarks", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, null)
+            Surface(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                OptIn(ExperimentalMaterial3Api::class)
+                TopAppBar(
+                    title = { Text("Bookmarks", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, null)
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { innerPadding ->
         if (bookmarks.isEmpty()) {
@@ -497,22 +509,27 @@ fun HistoryScreen(
 
     Scaffold(
         topBar = {
-            OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title = { Text("History Logs", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, null)
-                    }
-                },
-                actions = {
-                    if (history.isNotEmpty()) {
-                        TextButton(onClick = onClearAll) {
-                            Text("CLEAR ALL", color = MaterialTheme.colorScheme.error)
+            Surface(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                OptIn(ExperimentalMaterial3Api::class)
+                TopAppBar(
+                    title = { Text("History Logs", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, null)
+                        }
+                    },
+                    actions = {
+                        if (history.isNotEmpty()) {
+                            TextButton(onClick = onClearAll) {
+                                Text("CLEAR ALL", color = MaterialTheme.colorScheme.error)
+                            }
                         }
                     }
-                }
-            )
+                )
+            }
         }
     ) { innerPadding ->
         if (history.isEmpty()) {
@@ -570,15 +587,20 @@ fun DownloadsScreen(
 ) {
     Scaffold(
         topBar = {
-            OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title = { Text("Download Manager", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, null)
+            Surface(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                OptIn(ExperimentalMaterial3Api::class)
+                TopAppBar(
+                    title = { Text("Download Manager", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, null)
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { innerPadding ->
         if (downloads.isEmpty()) {
@@ -641,15 +663,20 @@ fun ExtensionsScreen(
 
     Scaffold(
         topBar = {
-            OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title = { Text("Plugins & Extensions", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, null)
+            Surface(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                OptIn(ExperimentalMaterial3Api::class)
+                TopAppBar(
+                    title = { Text("Plugins & Extensions", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, null)
+                        }
                     }
-                }
-            )
+                )
+            }
         },
         floatingActionButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -711,15 +738,20 @@ fun ExtensionCatalogScreen(
 ) {
     Scaffold(
         topBar = {
-            OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title = { Text("OmniWeb Store", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, null)
+            Surface(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                OptIn(ExperimentalMaterial3Api::class)
+                TopAppBar(
+                    title = { Text("OmniWeb Store", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, null)
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { innerPadding ->
         if (catalogItems.isEmpty()) {
@@ -786,15 +818,20 @@ fun ExtensionDetailScreen(
 
     Scaffold(
         topBar = {
-            OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title = { Text(item.name, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, null)
+            Surface(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                OptIn(ExperimentalMaterial3Api::class)
+                TopAppBar(
+                    title = { Text(item.name, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, null)
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { innerPadding ->
         Column(
@@ -913,15 +950,20 @@ fun SettingsScreen(
 
     Scaffold(
         topBar = {
-            OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title = { Text("Browser Settings", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, null)
+            Surface(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                OptIn(ExperimentalMaterial3Api::class)
+                TopAppBar(
+                    title = { Text("Browser Settings", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, null)
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { innerPadding ->
         Column(
@@ -1024,6 +1066,20 @@ fun SettingsScreen(
                     Switch(
                         checked = darkModeEnabled,
                         onCheckedChange = { viewModel.setDarkModeEnabled(it) }
+                    )
+                }
+            )
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+            val hideNavBarEnabled by viewModel.hideNavBar.collectAsState()
+            ListItem(
+                headlineContent = { Text("Hide navigation bar") },
+                supportingContent = { Text("Hide the bottom system bar for a cleaner fullscreen experience. Swipe up from the bottom to show it temporarily.") },
+                trailingContent = {
+                    Switch(
+                        checked = hideNavBarEnabled,
+                        onCheckedChange = { viewModel.setHideNavBar(it) }
                     )
                 }
             )
@@ -1195,19 +1251,85 @@ fun SettingsScreen(
                 }
             )
 
-            if (currentDnsOption.first == "Custom DNS" || (currentDnsUrl.isNotBlank() && dnsOptions.none { it.second == currentDnsUrl })) {
-                var customDnsText by remember(currentDnsUrl) { mutableStateOf(currentDnsUrl) }
+            val isCustomSelected = currentDnsOption.first == "Custom DNS" || currentDnsUrl == "custom" || (currentDnsUrl.isNotBlank() && dnsOptions.none { it.second == currentDnsUrl })
+            var customDnsText by remember(currentDnsUrl) { mutableStateOf(currentDnsUrl) }
+
+            val isValidDnsUrl = remember(customDnsText) {
+                customDnsText.startsWith("https://") && runCatching {
+                    val withoutScheme = customDnsText.substring(8)
+                    val host = withoutScheme.substringBefore('/')
+                    host.isNotBlank() && host.contains('.')
+                }.getOrDefault(false)
+            }
+
+            val showDnsError = isCustomSelected && customDnsText.isNotBlank() && !isValidDnsUrl
+
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 OutlinedTextField(
                     value = customDnsText,
                     onValueChange = {
-                        customDnsText = it
-                        viewModel.setCustomDnsUrl(it)
+                        if (isCustomSelected) {
+                            customDnsText = it
+                            viewModel.setCustomDnsUrl(it)
+                        }
                     },
-                    label = { Text("Custom DoH DNS URL") },
-                    placeholder = { Text("e.g. https://dns.adguard-dns.com/dns-query") },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    singleLine = true
+                    enabled = isCustomSelected,
+                    label = { Text("Custom DNS server (HTTPS URL)") },
+                    placeholder = { Text("https://dns.adguard-dns.com/dns-query") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = showDnsError,
+                    supportingText = {
+                        if (showDnsError) {
+                            Text("Invalid URL. Must start with https:// and contain a valid hostname.", color = MaterialTheme.colorScheme.error)
+                        } else {
+                            Text("Paste any DNS-over-HTTPS URL. Must start with https://. Used for downloads and updates only — WebView uses your device's system DNS.")
+                        }
+                    }
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val coroutineScope = rememberCoroutineScope()
+                var dnsTestResult by remember { mutableStateOf<String?>(null) }
+                var isDnsTesting by remember { mutableStateOf(false) }
+
+                Button(
+                    onClick = {
+                        isDnsTesting = true
+                        dnsTestResult = "Testing connection to $customDnsText..."
+                        coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            val result = com.example.data.prefs.DohResolver.resolve("example.com", customDnsText)
+                            dnsTestResult = if (result != null) {
+                                "🟢 Test Successful! example.com resolved to: $result"
+                            } else {
+                                "🔴 Resolution failed. Ensure the server URL is active and accepts DNS-JSON query requests."
+                            }
+                            isDnsTesting = false
+                        }
+                    },
+                    enabled = !isDnsTesting && customDnsText.isNotBlank() && isValidDnsUrl,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    if (isDnsTesting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text("Test DNS")
+                }
+
+                dnsTestResult?.let { result ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = result,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (result.startsWith("🟢")) Color(0xFF4CAF50) else if (result.startsWith("🔴")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))

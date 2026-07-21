@@ -17,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import com.example.ui.components.SearchBar
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -72,12 +73,15 @@ fun HomeScreen(
     totalAds: Int,
     totalTrackers: Int,
     totalPopups: Int,
+    searchEngineUrl: String,
     onSearch: (String) -> Unit,
     onNavigateTo: (String) -> Unit,
+    onTabsClick: () -> Unit = {},
+    onMenuClick: () -> Unit = {},
+    tabCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var searchQuery by remember { mutableStateOf("") }
     
     var shortcutsList by remember {
         mutableStateOf(ShortcutStorage.loadShortcuts(context))
@@ -111,6 +115,57 @@ fun HomeScreen(
             )
             .padding(16.8.dp)
     ) {
+        // Top-Right Utility Icons (Tabs & Menu) for Home Screen
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 4.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Tab Counter Button
+            IconButton(
+                onClick = onTabsClick,
+                modifier = Modifier.size(40.dp).testTag("home_tabs_button")
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Outlined.Layers,
+                        contentDescription = "View tabs",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                    if (tabCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 4.dp, y = (-4).dp)
+                                .size(16.dp)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = tabCount.toString(),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Menu Popup Trigger Button
+            IconButton(
+                onClick = onMenuClick,
+                modifier = Modifier.size(40.dp).testTag("home_menu_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Menu",
+                    tint = MaterialTheme.colorScheme.onBackground
+                )
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -156,42 +211,14 @@ fun HomeScreen(
 
 
             // Centered Search Input Box
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Search or type URL") },
-                singleLine = true,
-                shape = RoundedCornerShape(28.dp),
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = {
-                        if (searchQuery.trim().isNotEmpty()) {
-                            onSearch(searchQuery)
-                        }
-                    }
-                ),
+            SearchBar(
+                searchEngineUrl = searchEngineUrl,
+                onSubmit = onSearch,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp)
-                    .onKeyEvent { keyEvent ->
-                        if (keyEvent.type == KeyEventType.KeyUp && 
-                            (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
-                            if (searchQuery.trim().isNotEmpty()) {
-                                onSearch(searchQuery)
-                                true
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                    .testTag("home_search_input"),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                )
+                    .padding(horizontal = 8.dp),
+                inputTestTag = "home_search_input",
+                goButtonTestTag = "home_search_go_button"
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -371,6 +398,8 @@ fun HomeScreen(
                     }
                 }
             }
+
+
         }
     }
 
@@ -624,6 +653,7 @@ fun BrowserScreen(
     isPrivate: Boolean,
     browserEngine: BrowserEngine,
     tabManager: TabManager,
+    areBarsVisible: Boolean,
     modifier: Modifier = Modifier,
     onScrollChanged: ((scrollY: Int, oldScrollY: Int) -> Unit)? = null
 ) {
@@ -649,7 +679,15 @@ fun BrowserScreen(
         webView?.goBack()
     }
 
+    val topPadding by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (areBarsVisible) 72.dp else 0.dp,
+        animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow),
+        label = "BrowserTopPadding"
+    )
+
     Column(modifier = modifier.fillMaxSize()) {
+        Spacer(modifier = Modifier.height(topPadding))
+
         if (isPrivate) {
             Box(
                 modifier = Modifier

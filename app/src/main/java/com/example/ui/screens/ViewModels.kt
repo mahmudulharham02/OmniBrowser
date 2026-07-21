@@ -43,7 +43,8 @@ class BrowserViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun createNewTab(url: String = "omni://home", isPrivate: Boolean = false) {
-        tabManager.createTab(url, isPrivate)
+        val newTab = tabManager.createTab(url, isPrivate)
+        tabManager.selectTab(newTab.id)
     }
 
     fun selectTab(id: String) {
@@ -63,19 +64,7 @@ class BrowserViewModel(
     }
 
     fun loadUrlInActiveTab(url: String) {
-        // Check if query or URL
-        var destination = url.trim()
-        if (!destination.contains(".") && !destination.startsWith("omni://") && !destination.contains("://")) {
-            // Search query - URL encode the query
-            try {
-                val encodedQuery = java.net.URLEncoder.encode(destination, "UTF-8")
-                destination = searchEngineUrl.value + encodedQuery
-            } catch (e: Exception) {
-                destination = searchEngineUrl.value + destination
-            }
-        } else if (!destination.contains("://")) {
-            destination = "https://" + destination
-        }
+        val destination = com.example.search.SearchEngine.resolveUrl(url, searchEngineUrl.value) ?: return
 
         val activeId = activeTabId.value
         if (activeId == null) {
@@ -86,37 +75,35 @@ class BrowserViewModel(
             }
 
             val wv = tabManager.getWebViewForTab(activeId)
-            wv?.post {
-                wv.loadUrl(destination)
-            }
+            wv?.loadUrl(destination)
         }
     }
 
     fun reloadActiveTab() {
         val activeId = activeTabId.value ?: return
         val wv = tabManager.getWebViewForTab(activeId)
-        wv?.post { wv.reload() }
+        wv?.reload()
     }
 
     fun stopLoadingActiveTab() {
         val activeId = activeTabId.value ?: return
         val wv = tabManager.getWebViewForTab(activeId)
-        wv?.post { wv.stopLoading() }
+        wv?.stopLoading()
     }
 
     fun goBackInActiveTab() {
         val activeId = activeTabId.value ?: return
         val wv = tabManager.getWebViewForTab(activeId)
-        wv?.post {
-            if (wv.canGoBack()) wv.goBack()
+        if (wv != null && wv.canGoBack()) {
+            wv.goBack()
         }
     }
 
     fun goForwardInActiveTab() {
         val activeId = activeTabId.value ?: return
         val wv = tabManager.getWebViewForTab(activeId)
-        wv?.post {
-            if (wv.canGoForward()) wv.goForward()
+        if (wv != null && wv.canGoForward()) {
+            wv.goForward()
         }
     }
 

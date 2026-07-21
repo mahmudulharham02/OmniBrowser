@@ -11,14 +11,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.lifecycle.ViewModelProvider
 import com.example.ui.screens.*
-import com.example.ui.components.AddressBar
-import com.example.ui.components.NavigationToolbar
+import com.example.ui.components.ChromeTopBar
+import com.example.ui.components.RedesignedMenuPopup
 import com.example.ui.components.ConfirmDialog
 import com.example.ui.theme.MyApplicationTheme
 import com.example.data.CatalogIndexEntity
@@ -58,9 +59,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             val factory = remember { ViewModelFactory(container) }
             val browserViewModel = remember { ViewModelProvider(this@MainActivity, factory)[BrowserViewModel::class.java] }
+            val settingsViewModel = remember { ViewModelProvider(this@MainActivity, factory)[SettingsViewModel::class.java] }
             val currentTab by browserViewModel.currentTab.collectAsState()
+            val searchEngineUrl by browserViewModel.searchEngineUrl.collectAsState()
 
-            MyApplicationTheme(isIncognito = currentTab?.isPrivate == true) {
+            val darkModePref by settingsViewModel.darkMode.collectAsState()
+            val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val isDarkTheme = when (darkModePref) {
+                "dark" -> true
+                "light" -> false
+                else -> isSystemDark
+            }
+
+            MyApplicationTheme(
+                darkTheme = isDarkTheme,
+                isIncognito = currentTab?.isPrivate == true
+            ) {
                 val context = LocalContext.current
                 val coroutineScope = rememberCoroutineScope()
 
@@ -70,7 +84,6 @@ class MainActivity : ComponentActivity() {
                 val downloadsViewModel = remember { ViewModelProvider(this@MainActivity, factory)[DownloadsViewModel::class.java] }
                 val extensionsViewModel = remember { ViewModelProvider(this@MainActivity, factory)[ExtensionsViewModel::class.java] }
                 val catalogViewModel = remember { ViewModelProvider(this@MainActivity, factory)[CatalogViewModel::class.java] }
-                val settingsViewModel = remember { ViewModelProvider(this@MainActivity, factory)[SettingsViewModel::class.java] }
 
                 val hideNavBar = settingsViewModel.hideNavBar.collectAsState().value
                 DisposableEffect(hideNavBar) {
@@ -98,16 +111,22 @@ class MainActivity : ComponentActivity() {
                                 container.database.savedTabDao().getAllSavedTabs().first()
                             }
                             if (savedTabs.isNotEmpty()) {
-                                browserViewModel.closeAllTabs()
+                                browserViewModel.tabManager.closeAllTabs(addPlaceholder = false)
+                                var activeIdToSelect: String? = null
+                                val lastUsedTab = savedTabs.maxByOrNull { it.lastAccessedEpoch } ?: savedTabs.first()
                                 savedTabs.forEach { saved ->
                                     browserViewModel.tabManager.createTab(saved.url, saved.isPrivate).let { tab ->
                                         browserViewModel.tabManager.updateTab(tab.id) {
                                             it.copy(title = saved.title, faviconUrl = saved.faviconUrl)
                                         }
+                                        if (saved.id == lastUsedTab.id) {
+                                            activeIdToSelect = tab.id
+                                        }
                                     }
                                 }
-                                savedTabs.firstOrNull()?.id?.let { firstId ->
-                                    browserViewModel.selectTab(firstId)
+                                val selectId = activeIdToSelect ?: browserViewModel.tabs.value.firstOrNull()?.id
+                                if (selectId != null) {
+                                    browserViewModel.selectTab(selectId)
                                 }
                                 restored = true
                             }
@@ -173,141 +192,7 @@ class MainActivity : ComponentActivity() {
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
-                    contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                    topBar = {
-                        if (currentScreen == BrowserScreenType.BROWSER && currentTab != null && currentTab?.url != "omni://home") {
-                            AnimatedVisibility(
-                                visible = areBarsVisible,
-                                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-                                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
-                            ) {
-                                Surface(
-                                    modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
-                                    color = MaterialTheme.colorScheme.surface
-                                ) {
-                                    AddressBar(
-                                        url = currentTab?.url ?: "omni://home",
-                                        isLoading = currentTab?.isLoading == true,
-                                        progress = currentTab?.progress ?: 0,
-                                        blockedCount = currentTab?.blockedCount ?: 0,
-                                        onUrlSubmit = { browserViewModel.loadUrlInActiveTab(it) },
-                                        onReload = { browserViewModel.reloadActiveTab() },
-                                        onStop = { browserViewModel.stopLoadingActiveTab() },
-                                        onShieldClick = {
-                                            Toast.makeText(context, "Shield blocked ${currentTab?.blockedCount ?: 0} elements on this page. (Total Session Blocks: $totalAdsBlocked ads, $totalTrackersBlocked trackers, $totalPopupsBlocked popups).", Toast.LENGTH_LONG).show()
-                                        },
-                                        customDnsUrl = customDnsUrl,
-                                        isPrivate = currentTab?.isPrivate == true
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    bottomBar = {
-                        if (currentScreen == BrowserScreenType.BROWSER) {
-                            AnimatedVisibility(
-                                visible = areBarsVisible || showMenu,
-                                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-                            ) {
-                                NavigationToolbar(
-                                    canGoBack = currentTab?.canGoBack == true,
-                                    canGoForward = currentTab?.canGoForward == true,
-                                    tabCount = tabs.size,
-                                    onBack = { browserViewModel.goBackInActiveTab() },
-                                    onForward = { browserViewModel.goForwardInActiveTab() },
-                                    onHome = { browserViewModel.loadUrlInActiveTab("omni://home") },
-                                    onTabsClick = {
-                                        browserViewModel.tabManager.captureActiveTabThumbnail()
-                                        currentScreen = BrowserScreenType.TABS
-                                    },
-                                    onMenuClick = { showMenu = true }
-                                )
-                            }
-
-                            // Menu options
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("New Incognito Tab") },
-                                    onClick = {
-                                        showMenu = false
-                                        browserViewModel.createNewTab("omni://home", isPrivate = true)
-                                        Toast.makeText(context, "Opened Incognito Tab", Toast.LENGTH_SHORT).show()
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.VisibilityOff, null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Bookmarks") },
-                                    onClick = {
-                                        showMenu = false
-                                        currentScreen = BrowserScreenType.BOOKMARKS
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Bookmark, null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Add Bookmark") },
-                                    onClick = {
-                                        showMenu = false
-                                        browserViewModel.addBookmarkForActiveTab()
-                                        Toast.makeText(context, "Added bookmark!", Toast.LENGTH_SHORT).show()
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.BookmarkAdd, null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("History") },
-                                    onClick = {
-                                        showMenu = false
-                                        currentScreen = BrowserScreenType.HISTORY
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.History, null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Downloads") },
-                                    onClick = {
-                                        showMenu = false
-                                        currentScreen = BrowserScreenType.DOWNLOADS
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.FileDownload, null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Plugins & Extensions") },
-                                    onClick = {
-                                        showMenu = false
-                                        currentScreen = BrowserScreenType.EXTENSIONS
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Extension, null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Restore Closed Tab") },
-                                    onClick = {
-                                        showMenu = false
-                                        browserViewModel.restoreLastClosedTab()
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Undo, null) },
-                                    enabled = browserViewModel.tabManager.recentlyClosedTabs.isNotEmpty()
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (currentTab?.desktopMode == true) "Request Mobile Site" else "Request Desktop Site") },
-                                    onClick = {
-                                        showMenu = false
-                                        browserViewModel.toggleDesktopModeForActiveTab()
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Phonelink, null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Settings") },
-                                    onClick = {
-                                        showMenu = false
-                                        currentScreen = BrowserScreenType.SETTINGS
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Settings, null) }
-                                )
-                            }
-                        }
-                    }
+                    contentWindowInsets = WindowInsets(0, 0, 0, 0)
                 ) { innerPadding ->
                     Box(
                         modifier = Modifier
@@ -321,8 +206,15 @@ class MainActivity : ComponentActivity() {
                                         totalAds = totalAdsBlocked,
                                         totalTrackers = totalTrackersBlocked,
                                         totalPopups = totalPopupsBlocked,
+                                        searchEngineUrl = searchEngineUrl,
                                         onSearch = { browserViewModel.loadUrlInActiveTab(it) },
-                                        onNavigateTo = { browserViewModel.loadUrlInActiveTab(it) }
+                                        onNavigateTo = { browserViewModel.loadUrlInActiveTab(it) },
+                                        onTabsClick = {
+                                            browserViewModel.tabManager.captureActiveTabThumbnail()
+                                            currentScreen = BrowserScreenType.TABS
+                                        },
+                                        onMenuClick = { showMenu = true },
+                                        tabCount = tabs.size
                                     )
                                 } else {
                                     BrowserScreen(
@@ -333,6 +225,7 @@ class MainActivity : ComponentActivity() {
                                         isPrivate = currentTab!!.isPrivate,
                                         browserEngine = container.browserEngine,
                                         tabManager = container.tabManager,
+                                        areBarsVisible = areBarsVisible,
                                         onScrollChanged = { scrollY, oldScrollY ->
                                             if (scrollY == 0) {
                                                 if (!areBarsVisible) {
@@ -457,6 +350,109 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
+
+                        if (currentScreen == BrowserScreenType.BROWSER && currentTab != null && currentTab?.url != "omni://home") {
+                            val density = androidx.compose.ui.platform.LocalDensity.current
+                            val topBarHeightPx = with(density) { 85.dp.toPx() }
+                            val translationY by androidx.compose.animation.core.animateFloatAsState(
+                                targetValue = if (areBarsVisible || showMenu) 0f else -topBarHeightPx,
+                                animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow),
+                                label = "TopBarTranslation"
+                            )
+
+                            ChromeTopBar(
+                                url = currentTab?.url ?: "omni://home",
+                                isLoading = currentTab?.isLoading == true,
+                                progress = currentTab?.progress ?: 0,
+                                tabCount = tabs.size,
+                                onUrlSubmit = { browserViewModel.loadUrlInActiveTab(it) },
+                                onReload = { browserViewModel.reloadActiveTab() },
+                                onStop = { browserViewModel.stopLoadingActiveTab() },
+                                onTabsClick = {
+                                    browserViewModel.tabManager.captureActiveTabThumbnail()
+                                    currentScreen = BrowserScreenType.TABS
+                                },
+                                onMenuClick = { showMenu = true },
+                                canGoBack = currentTab?.canGoBack == true,
+                                canGoForward = currentTab?.canGoForward == true,
+                                onBack = { browserViewModel.goBackInActiveTab() },
+                                onForward = { browserViewModel.goForwardInActiveTab() },
+                                modifier = Modifier
+                                    .align(androidx.compose.ui.Alignment.TopCenter)
+                                    .graphicsLayer {
+                                        this.translationY = translationY
+                                    },
+                                customDnsUrl = customDnsUrl,
+                                isPrivate = currentTab?.isPrivate == true
+                            )
+                        }
+
+                        // Custom Redesigned Menu Popup Overlay
+                        RedesignedMenuPopup(
+                            visible = showMenu,
+                            onDismiss = { showMenu = false },
+                            onNewTab = {
+                                browserViewModel.createNewTab("omni://home")
+                                currentScreen = BrowserScreenType.BROWSER
+                            },
+                            onNewIncognitoTab = {
+                                browserViewModel.createNewTab("omni://home", isPrivate = true)
+                                currentScreen = BrowserScreenType.BROWSER
+                                Toast.makeText(context, "Opened Incognito Tab", Toast.LENGTH_SHORT).show()
+                            },
+                            onHistory = {
+                                currentScreen = BrowserScreenType.HISTORY
+                            },
+                            onDeleteBrowsingData = {
+                                coroutineScope.launch {
+                                    historyViewModel.clearAllHistory()
+                                    Toast.makeText(context, "Browsing history deleted!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onDownloads = {
+                                currentScreen = BrowserScreenType.DOWNLOADS
+                            },
+                            onBookmarks = {
+                                currentScreen = BrowserScreenType.BOOKMARKS
+                            },
+                            onRecentTabs = {
+                                browserViewModel.restoreLastClosedTab()
+                            },
+                            onShare = {
+                                val currentUrl = currentTab?.url
+                                if (currentUrl != null && currentUrl != "omni://home") {
+                                    val sendIntent = android.content.Intent().apply {
+                                        action = android.content.Intent.ACTION_SEND
+                                        putExtra(android.content.Intent.EXTRA_TEXT, currentUrl)
+                                        type = "text/plain"
+                                    }
+                                    val shareIntent = android.content.Intent.createChooser(sendIntent, null)
+                                    context.startActivity(shareIntent)
+                                } else {
+                                    Toast.makeText(context, "Nothing to share", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onFindInPage = {
+                                Toast.makeText(context, "Find in Page is under development", Toast.LENGTH_SHORT).show()
+                            },
+                            onTranslate = {
+                                Toast.makeText(context, "Translate is under development", Toast.LENGTH_SHORT).show()
+                            },
+                            onAddToHomeScreen = {
+                                Toast.makeText(context, "Add to Home Screen is under development", Toast.LENGTH_SHORT).show()
+                            },
+                            isDesktopSite = currentTab?.desktopMode == true,
+                            onToggleDesktopSite = {
+                                browserViewModel.toggleDesktopModeForActiveTab()
+                            },
+                            onSettings = {
+                                currentScreen = BrowserScreenType.SETTINGS
+                            },
+                            onHelpFeedback = {
+                                Toast.makeText(context, "Help & Feedback: Visit our github page or settings.", Toast.LENGTH_LONG).show()
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
                 }
             }

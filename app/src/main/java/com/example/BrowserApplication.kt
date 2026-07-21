@@ -95,7 +95,9 @@ class BrowserApplication : Application() {
                     messageBus = MessageBus(),
                     popupBlocker = popupBlocker,
                     downloadHandler = downloadHandler
-                )
+                ).also { engine ->
+                    tabManager.setBrowserEngine(engine)
+                }
             }
         }
 

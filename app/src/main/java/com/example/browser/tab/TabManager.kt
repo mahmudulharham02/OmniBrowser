@@ -20,6 +20,19 @@ class TabManager(private val webViewFactory: TabWebViewFactory) {
     private val thumbnails = mutableMapOf<String, Bitmap?>()
     val recentlyClosedTabs = mutableListOf<TabModel>()
 
+    private var browserEngine: com.example.browser.engine.BrowserEngine? = null
+
+    fun setBrowserEngine(engine: com.example.browser.engine.BrowserEngine) {
+        browserEngine = engine
+        // Set up any existing tabs
+        _tabs.value.forEach { tab ->
+            val wv = activeWebViews[tab.id]
+            if (wv != null) {
+                engine.setupWebView(wv, tab.id, tab.isPrivate)
+            }
+        }
+    }
+
     fun createTab(url: String = "omni://home", isPrivate: Boolean = false): TabModel {
         val tabId = UUID.randomUUID().toString()
         val title = if (url == "omni://home") "New Tab" else url
@@ -34,8 +47,23 @@ class TabManager(private val webViewFactory: TabWebViewFactory) {
 
         _tabs.value = _tabs.value + newTab
 
+        // Immediately obtain WebView and setup
+        val currentWv = webViewFactory.obtainWebView()
+        activeWebViews[tabId] = currentWv
+        
+        browserEngine?.let { engine ->
+            engine.setupWebView(currentWv, tabId, isPrivate)
+        }
+
+        if (url != "omni://home") {
+            currentWv.loadUrl(url)
+        }
+
         if (_activeTabId.value == null) {
             selectTab(tabId)
+        } else {
+            currentWv.onPause()
+            currentWv.pauseTimers()
         }
         return newTab
     }
@@ -64,6 +92,9 @@ class TabManager(private val webViewFactory: TabWebViewFactory) {
         if (currentWv == null) {
             currentWv = webViewFactory.obtainWebView()
             activeWebViews[id] = currentWv
+            browserEngine?.let { engine ->
+                engine.setupWebView(currentWv, id, newTab.isPrivate)
+            }
             // Load URL if it's not a local home page
             if (newTab.url != "omni://home") {
                 currentWv.loadUrl(newTab.url)
@@ -100,14 +131,14 @@ class TabManager(private val webViewFactory: TabWebViewFactory) {
         thumbnails.remove(id)?.recycle()
 
         val listAfterClose = _tabs.value.filter { it.id != id }
-        _tabs.value = listAfterClose
-
-        // Handle active ID changes
-        if (_activeTabId.value == id) {
-            if (listAfterClose.isNotEmpty()) {
+        if (listAfterClose.isEmpty()) {
+            _tabs.value = emptyList()
+            _activeTabId.value = null
+            createTab("omni://home")
+        } else {
+            _tabs.value = listAfterClose
+            if (_activeTabId.value == id) {
                 selectTab(listAfterClose.last().id)
-            } else {
-                _activeTabId.value = null
             }
         }
     }
@@ -123,7 +154,7 @@ class TabManager(private val webViewFactory: TabWebViewFactory) {
         return newTab
     }
 
-    fun closeAllTabs() {
+    fun closeAllTabs(addPlaceholder: Boolean = true) {
         // Recycle all active WebViews
         activeWebViews.forEach { (_, wv) ->
             webViewFactory.recycle(wv)
@@ -136,6 +167,10 @@ class TabManager(private val webViewFactory: TabWebViewFactory) {
 
         _tabs.value = emptyList()
         _activeTabId.value = null
+
+        if (addPlaceholder) {
+            createTab("omni://home")
+        }
     }
 
     fun getWebViewForTab(id: String): WebView? {

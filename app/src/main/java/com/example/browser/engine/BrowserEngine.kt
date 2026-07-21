@@ -73,8 +73,8 @@ class BrowserEngine(
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 val darkMode = runBlocking { settingsDataStore.darkModeMode() }
                 val forceDarkMode = when (darkMode) {
-                    "on" -> WebSettings.FORCE_DARK_ON
-                    "off" -> WebSettings.FORCE_DARK_OFF
+                    "dark" -> WebSettings.FORCE_DARK_ON
+                    "light" -> WebSettings.FORCE_DARK_OFF
                     else -> WebSettings.FORCE_DARK_AUTO
                 }
                 forceDark = forceDarkMode

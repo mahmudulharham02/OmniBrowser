@@ -2,7 +2,10 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -220,33 +223,7 @@ fun AddressBar(
                 }
             )
 
-            // Shield blocked items counter
-            if (blockedCount > 0) {
-                Surface(
-                    onClick = onShieldClick,
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.padding(end = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Shield,
-                            contentDescription = "Adblock Shield",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = blockedCount.toString(),
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
+
 
             // Reload or Stop Button
             IconButton(
@@ -776,3 +753,517 @@ fun ConfirmDialog(
         }
     )
 }
+
+@Composable
+fun ChromeTopBar(
+    url: String,
+    isLoading: Boolean,
+    progress: Int,
+    tabCount: Int,
+    onUrlSubmit: (String) -> Unit,
+    onReload: () -> Unit,
+    onStop: () -> Unit,
+    onTabsClick: () -> Unit,
+    onMenuClick: () -> Unit,
+    canGoBack: Boolean,
+    canGoForward: Boolean,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    modifier: Modifier = Modifier,
+    customDnsUrl: String = "",
+    isPrivate: Boolean = false
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding(),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Left: Back button
+            IconButton(
+                onClick = onBack,
+                enabled = canGoBack,
+                modifier = Modifier.size(40.dp).testTag("top_back_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = if (canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                )
+            }
+
+            // Center: CompactAddressBar with URL field
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp)
+            ) {
+                CompactAddressBar(
+                    url = url,
+                    isLoading = isLoading,
+                    progress = progress,
+                    blockedCount = 0,
+                    onUrlSubmit = onUrlSubmit,
+                    onReload = onReload,
+                    onStop = onStop,
+                    onShieldClick = {},
+                    customDnsUrl = customDnsUrl,
+                    isPrivate = isPrivate
+                )
+            }
+
+            // Right: Tab switcher count & Menu options
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // Tab Counter ([1])
+                IconButton(
+                    onClick = onTabsClick,
+                    modifier = Modifier.size(40.dp).testTag("top_tabs_button")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.Layers,
+                            contentDescription = "View tabs"
+                        )
+                        if (tabCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 4.dp, y = (-4).dp)
+                                    .size(16.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = tabCount.toString(),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Menu Trigger (⋮)
+                IconButton(
+                    onClick = onMenuClick,
+                    modifier = Modifier.size(40.dp).testTag("top_menu_button")
+                ) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ChromeBottomBar(
+    url: String,
+    isLoading: Boolean,
+    progress: Int,
+    blockedCount: Int,
+    tabCount: Int,
+    onUrlSubmit: (String) -> Unit,
+    onReload: () -> Unit,
+    onStop: () -> Unit,
+    onShieldClick: () -> Unit,
+    onHomeClick: () -> Unit,
+    onNewTabClick: () -> Unit,
+    onTabsClick: () -> Unit,
+    onMenuClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    customDnsUrl: String = "",
+    isPrivate: Boolean = false
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Left: Home Icon
+            IconButton(
+                onClick = onHomeClick,
+                modifier = Modifier.size(40.dp).testTag("bottom_home_button")
+            ) {
+                Icon(Icons.Default.Home, contentDescription = "Home")
+            }
+
+            // Center: URL/Search Bar
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp)
+            ) {
+                CompactAddressBar(
+                    url = url,
+                    isLoading = isLoading,
+                    progress = progress,
+                    blockedCount = blockedCount,
+                    onUrlSubmit = onUrlSubmit,
+                    onReload = onReload,
+                    onStop = onStop,
+                    onShieldClick = onShieldClick,
+                    customDnsUrl = customDnsUrl,
+                    isPrivate = isPrivate
+                )
+            }
+
+            // Right: New Tab (+), Tab Counter ([1]), Menu (⋮)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // New Tab (+)
+                IconButton(
+                    onClick = onNewTabClick,
+                    modifier = Modifier.size(40.dp).testTag("bottom_new_tab_button")
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "New Tab")
+                }
+
+                // Tab Counter ([1])
+                IconButton(
+                    onClick = onTabsClick,
+                    modifier = Modifier.size(40.dp).testTag("bottom_tabs_button")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.Layers,
+                            contentDescription = "View tabs"
+                        )
+                        if (tabCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 4.dp, y = (-4).dp)
+                                    .size(16.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = tabCount.toString(),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Menu (⋮)
+                IconButton(
+                    onClick = onMenuClick,
+                    modifier = Modifier.size(40.dp).testTag("bottom_menu_button")
+                ) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CompactAddressBar(
+    url: String,
+    isLoading: Boolean,
+    progress: Int,
+    blockedCount: Int,
+    onUrlSubmit: (String) -> Unit,
+    onReload: () -> Unit,
+    onStop: () -> Unit,
+    onShieldClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    customDnsUrl: String = "",
+    isPrivate: Boolean = false
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    var textFieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = if (url == "omni://home") "" else url,
+                selection = TextRange.Zero
+            )
+        )
+    }
+    LaunchedEffect(url) {
+        val newText = if (url == "omni://home") "" else url
+        textFieldValue = TextFieldValue(
+            text = newText,
+            selection = if (isFocused) TextRange(0, newText.length) else TextRange.Zero
+        )
+    }
+
+    val isHttps = url.startsWith("https://")
+    val isLocal = url.startsWith("omni://")
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .heightIn(min = 36.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // HTTPS / HTTP Indicator Icon
+            Icon(
+                imageVector = when {
+                    isLocal -> Icons.Default.Home
+                    isHttps -> Icons.Default.Lock
+                    else -> Icons.Default.Warning
+                },
+                contentDescription = if (isHttps) "Secure connection" else "Not secure",
+                tint = when {
+                    isLocal -> MaterialTheme.colorScheme.primary
+                    isHttps -> Color(0xFF4CAF50)
+                    else -> Color(0xFFF44336)
+                },
+                modifier = Modifier.size(16.dp)
+            )
+
+            if (isPrivate) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.VisibilityOff,
+                    contentDescription = "Private Tab",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            // Text Input Field
+            BasicTextField(
+                value = textFieldValue,
+                onValueChange = { textFieldValue = it },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Search
+                ),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        val input = textFieldValue.text
+                        if (input.trim().isNotEmpty()) {
+                            onUrlSubmit(input)
+                        }
+                    }
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier
+                    .weight(1f)
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused && !isFocused) {
+                            if (textFieldValue.text.isNotEmpty()) {
+                                textFieldValue = textFieldValue.copy(
+                                    selection = TextRange(0, textFieldValue.text.length)
+                                )
+                            }
+                        }
+                        isFocused = focusState.isFocused
+                    }
+                    .testTag("url_input_bottom"),
+                decorationBox = { innerTextField ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (textFieldValue.text.isEmpty()) {
+                            Text(
+                                text = "Search or type URL",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                maxLines = 1
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            )
+
+
+
+            // Reload or Stop Button
+            IconButton(
+                onClick = { if (isLoading) onStop() else onReload() },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = if (isLoading) Icons.Default.Close else Icons.Default.Refresh,
+                    contentDescription = if (isLoading) "Stop Loading" else "Reload page",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        // Horizontal Loading Progress Bar
+        if (isLoading && progress < 100) {
+            LinearProgressIndicator(
+                progress = { progress / 100f },
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun RedesignedMenuPopup(
+    visible: Boolean,
+    onDismiss: () -> Unit,
+    onNewTab: () -> Unit,
+    onNewIncognitoTab: () -> Unit,
+    onHistory: () -> Unit,
+    onDeleteBrowsingData: () -> Unit,
+    onDownloads: () -> Unit,
+    onBookmarks: () -> Unit,
+    onRecentTabs: () -> Unit,
+    onShare: () -> Unit,
+    onFindInPage: () -> Unit,
+    onTranslate: () -> Unit,
+    onAddToHomeScreen: () -> Unit,
+    isDesktopSite: Boolean,
+    onToggleDesktopSite: () -> Unit,
+    onSettings: () -> Unit,
+    onHelpFeedback: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 24.dp)
+                    .clickable(enabled = false) {},
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+                shape = RoundedCornerShape(28.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .size(width = 36.dp, height = 4.dp)
+                            .background(Color.Gray.copy(alpha = 0.5f), RoundedCornerShape(2.dp))
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Browser Options",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp)
+                            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    ) {
+                        val items = listOf(
+                            MenuItemData("New Tab", Icons.Default.Add, onNewTab),
+                            MenuItemData("New Incognito Tab", Icons.Default.VisibilityOff, onNewIncognitoTab),
+                            MenuItemData("History", Icons.Default.History, onHistory),
+                            MenuItemData("Delete Browsing Data", Icons.Default.Delete, onDeleteBrowsingData),
+                            MenuItemData("Downloads", Icons.Default.FileDownload, onDownloads),
+                            MenuItemData("Bookmarks", Icons.Default.Bookmark, onBookmarks),
+                            MenuItemData("Recent Tabs", Icons.Default.Undo, onRecentTabs),
+                            MenuItemData("Share", Icons.Default.Share, onShare),
+                            MenuItemData("Find in Page", Icons.Default.Search, onFindInPage),
+                            MenuItemData("Translate", Icons.Default.Language, onTranslate),
+                            MenuItemData("Add to Home Screen", Icons.Default.Home, onAddToHomeScreen),
+                            MenuItemData(
+                                if (isDesktopSite) "Request Mobile Site" else "Request Desktop Site",
+                                Icons.Default.Phonelink,
+                                onToggleDesktopSite
+                            ),
+                            MenuItemData("Settings", Icons.Default.Settings, onSettings),
+                            MenuItemData("Help & Feedback", Icons.Default.Info, onHelpFeedback)
+                        )
+
+                        items.forEach { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onDismiss()
+                                        item.onClick()
+                                    }
+                                    .padding(vertical = 12.dp, horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = item.icon,
+                                    contentDescription = item.text,
+                                    tint = Color.LightGray,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(
+                                    text = item.text,
+                                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.White)
+                                )
+                            }
+                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+data class MenuItemData(
+    val text: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val onClick: () -> Unit
+)

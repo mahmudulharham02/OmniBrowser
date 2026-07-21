@@ -35,14 +35,8 @@ To run locally:
 
 Contributions, issues, and feature requests are welcome. Please open an issue or submit a pull request.
 
-## Screenshots
-
-(Place screenshots in /assets or the repo root and reference them here.)
-
 ## License
 
 This project is licensed under the MIT License — see the LICENSE file for details.
 
 ---
-
-Maintained by @mahmudulharham02

@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -50,8 +51,19 @@ fun SearchBar(
     goButtonTestTag: String = "search_go_button"
 ) {
     var text by remember(initialValue) { mutableStateOf(initialValue) }
+    var isFocused by remember { mutableStateOf(false) }
+    var suggestions by remember { mutableStateOf<List<com.example.search.SearchSuggestion>>(emptyList()) }
     val focusRequester = remember { FocusRequester() }
-    
+
+    LaunchedEffect(text, isFocused) {
+        if (!isFocused || text.isBlank()) {
+            suggestions = emptyList()
+            return@LaunchedEffect
+        }
+        delay(150)
+        suggestions = com.example.search.SearchSuggestionRepository.fetchSuggestions(text)
+    }
+
     LaunchedEffect(autoFocus) {
         if (autoFocus) {
             // Small delay to ensure layout is ready
@@ -59,85 +71,117 @@ fun SearchBar(
             runCatching { focusRequester.requestFocus() }
         }
     }
-    
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = { 
-                text = it
-                Log.d("OmniSearch", "Text changed: '$it'")
-            },
-            modifier = Modifier
-                .weight(1f)
-                .focusRequester(focusRequester)
-                .onKeyEvent { keyEvent ->
-                    if (keyEvent.type == KeyEventType.KeyUp && 
-                        (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
-                        if (text.trim().isNotEmpty()) {
-                            performSearch(text, searchEngineUrl, onSubmit)
-                            true
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { 
+                    text = it
+                    Log.d("OmniSearch", "Text changed: '$it'")
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { focusState ->
+                        isFocused = focusState.isFocused
+                    }
+                    .onKeyEvent { keyEvent ->
+                        if (keyEvent.type == KeyEventType.KeyUp && 
+                            (keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)) {
+                            if (text.trim().isNotEmpty()) {
+                                suggestions = emptyList()
+                                performSearch(text, searchEngineUrl, onSubmit)
+                                true
+                            } else {
+                                false
+                            }
                         } else {
                             false
                         }
-                    } else {
-                        false
                     }
-                }
-                .testTag(inputTestTag),
-            placeholder = { Text(placeholder) },
-            leadingIcon = {
-                IconButton(
-                    onClick = { performSearch(text, searchEngineUrl, onSubmit) },
-                    modifier = Modifier.testTag("search_icon_button")
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
-                }
-            },
-            trailingIcon = {
-                if (text.isNotEmpty()) {
+                    .testTag(inputTestTag),
+                placeholder = { Text(placeholder) },
+                leadingIcon = {
                     IconButton(
-                        onClick = { text = "" },
-                        modifier = Modifier.testTag("search_clear_button")
+                        onClick = {
+                            suggestions = emptyList()
+                            performSearch(text, searchEngineUrl, onSubmit)
+                        },
+                        modifier = Modifier.testTag("search_icon_button")
                     ) {
-                        Icon(Icons.Default.Close, "Clear")
+                        Icon(Icons.Default.Search, contentDescription = "Search")
                     }
-                }
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Search,
-                keyboardType = KeyboardType.Uri
-            ),
-            keyboardActions = KeyboardActions(
-                onSearch = { performSearch(text, searchEngineUrl, onSubmit) }
-            ),
-            shape = RoundedCornerShape(28.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                },
+                trailingIcon = {
+                    if (text.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                text = ""
+                                suggestions = emptyList()
+                            },
+                            modifier = Modifier.testTag("search_clear_button")
+                        ) {
+                            Icon(Icons.Default.Close, "Clear")
+                        }
+                    }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Search,
+                    keyboardType = KeyboardType.Uri
+                ),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        suggestions = emptyList()
+                        performSearch(text, searchEngineUrl, onSubmit)
+                    }
+                ),
+                shape = RoundedCornerShape(28.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                )
             )
-        )
-        
-        Spacer(modifier = Modifier.width(8.dp))
+            
+            Spacer(modifier = Modifier.width(8.dp))
 
-        // Visible Go button as a backup submit path
-        IconButton(
-            onClick = { performSearch(text, searchEngineUrl, onSubmit) },
-            enabled = text.isNotBlank(),
-            modifier = Modifier
-                .size(48.dp)
-                .testTag(goButtonTestTag)
-        ) {
-            Icon(
-                Icons.Default.ArrowForward,
-                contentDescription = "Go",
-                tint = if (text.isNotBlank()) 
-                    MaterialTheme.colorScheme.primary 
-                else 
-                    MaterialTheme.colorScheme.onSurfaceVariant
+            // Visible Go button as a backup submit path
+            IconButton(
+                onClick = {
+                    suggestions = emptyList()
+                    performSearch(text, searchEngineUrl, onSubmit)
+                },
+                enabled = text.isNotBlank(),
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag(goButtonTestTag)
+            ) {
+                Icon(
+                    Icons.Default.ArrowForward,
+                    contentDescription = "Go",
+                    tint = if (text.isNotBlank()) 
+                        MaterialTheme.colorScheme.primary 
+                    else 
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (isFocused && suggestions.isNotEmpty()) {
+            SearchSuggestionsOverlay(
+                suggestions = suggestions,
+                onSuggestionSelected = { selected ->
+                    text = selected
+                    suggestions = emptyList()
+                    performSearch(selected, searchEngineUrl, onSubmit)
+                },
+                onSuggestionInserted = { inserted ->
+                    text = inserted
+                }
             )
         }
     }

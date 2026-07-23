@@ -39,6 +39,15 @@ class SettingsDataStore(private val context: Context) {
         val CUSTOM_DNS_URL = stringPreferencesKey("custom_dns_url")
         val RESTORE_TABS_ON_STARTUP = booleanPreferencesKey("restore_tabs_on_startup")
         val HIDE_NAV_BAR = booleanPreferencesKey("hide_nav_bar")
+        val LOCK_INCOGNITO_TABS = booleanPreferencesKey("lock_incognito_tabs")
+    }
+
+    val lockIncognitoTabs: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+        preferences[LOCK_INCOGNITO_TABS] ?: false
+    }
+
+    suspend fun setLockIncognitoTabs(enabled: Boolean) {
+        context.settingsDataStore.edit { it[LOCK_INCOGNITO_TABS] = enabled }
     }
 
     val hideNavBar: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->

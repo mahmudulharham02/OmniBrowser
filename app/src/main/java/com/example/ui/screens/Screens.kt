@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.browser.engine.BrowserEngine
 import com.example.browser.tab.TabManager
@@ -79,6 +80,8 @@ fun HomeScreen(
     onTabsClick: () -> Unit = {},
     onMenuClick: () -> Unit = {},
     tabCount: Int = 0,
+    isDarkTheme: Boolean = false,
+    onToggleDarkTheme: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -113,62 +116,11 @@ fun HomeScreen(
                     )
                 )
             )
-            .padding(16.8.dp)
     ) {
-        // Top-Right Utility Icons (Tabs & Menu) for Home Screen
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 4.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            // Tab Counter Button
-            IconButton(
-                onClick = onTabsClick,
-                modifier = Modifier.size(40.dp).testTag("home_tabs_button")
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Outlined.Layers,
-                        contentDescription = "View tabs",
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
-                    if (tabCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = 4.dp, y = (-4).dp)
-                                .size(16.dp)
-                                .background(MaterialTheme.colorScheme.primary, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = tabCount.toString(),
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Menu Popup Trigger Button
-            IconButton(
-                onClick = onMenuClick,
-                modifier = Modifier.size(40.dp).testTag("home_menu_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Menu",
-                    tint = MaterialTheme.colorScheme.onBackground
-                )
-            }
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(horizontal = 16.8.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -398,8 +350,72 @@ fun HomeScreen(
                     }
                 }
             }
+        }
 
+        // Top-Right Utility Icons (Theme, Tabs & Menu) for Home Screen with high zIndex
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .zIndex(10f)
+                .padding(top = 4.dp, end = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Global Theme Toggle Button
+            if (onToggleDarkTheme != null) {
+                IconButton(
+                    onClick = { onToggleDarkTheme() },
+                    modifier = Modifier.size(40.dp).testTag("home_theme_toggle_button")
+                ) {
+                    Icon(
+                        imageVector = if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                        contentDescription = if (isDarkTheme) "Switch to Light Theme" else "Switch to Dark Theme",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+            }
 
+            // Tab Counter Button
+            IconButton(
+                onClick = onTabsClick,
+                modifier = Modifier.size(40.dp).testTag("home_tabs_button")
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Outlined.Layers,
+                        contentDescription = "View tabs",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                    if (tabCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 4.dp, y = (-4).dp)
+                                .size(16.dp)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = tabCount.toString(),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Menu Popup Trigger Button
+            IconButton(
+                onClick = onMenuClick,
+                modifier = Modifier.size(40.dp).testTag("home_menu_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Menu",
+                    tint = MaterialTheme.colorScheme.onBackground
+                )
+            }
         }
     }
 
@@ -665,61 +681,56 @@ fun BrowserScreen(
         wv
     }
 
-    DisposableEffect(webView) {
-        webView?.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
-            onScrollChanged?.invoke(scrollY, oldScrollY)
-        }
-        onDispose {
-            webView?.setOnScrollChangeListener(null)
-        }
-    }
-
     // Capture standard system back actions to navigate WebView history backwards
     BackHandler(enabled = webView?.canGoBack() == true) {
         webView?.goBack()
     }
 
-    val topPadding by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (areBarsVisible) 72.dp else 0.dp,
-        animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow),
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val statusBarHeightDp = with(density) { WindowInsets.statusBars.getTop(density).toDp() }
+    val chromeTopBarHeightDp = 56.dp
+    
+    val currentTopPadding by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (areBarsVisible) statusBarHeightDp + chromeTopBarHeightDp else statusBarHeightDp,
+        animationSpec = androidx.compose.animation.core.tween(
+            durationMillis = 200,
+            easing = androidx.compose.animation.core.FastOutSlowInEasing
+        ),
         label = "BrowserTopPadding"
     )
 
-    Column(modifier = modifier.fillMaxSize()) {
-        Spacer(modifier = Modifier.height(topPadding))
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(top = currentTopPadding)
+    ) {
+        if (webView != null) {
+            WebViewPullToRefresh(
+                webView = webView,
+                isLoading = isLoading,
+                onRefresh = { webView.reload() },
+                onScrollChanged = onScrollChanged,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
 
         if (isPrivate) {
             Box(
                 modifier = Modifier
+                    .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .background(Color(0xFF212121))
+                    .background(Color(0xFF1E1E1E))
                     .padding(vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.VisibilityOff, null, tint = Color.LightGray, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.VisibilityOff, null, tint = Color.LightGray, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Private Browsing Tab Mode", style = MaterialTheme.typography.labelSmall, color = Color.LightGray)
-                }
-            }
-        }
-
-        Box(modifier = Modifier.weight(1f)) {
-            if (webView != null) {
-                AndroidView(
-                    factory = {
-                        webView.apply {
-                            layoutParams = ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    Text("Incognito Browsing Mode", style = MaterialTheme.typography.labelSmall, color = Color.LightGray)
                 }
             }
         }
@@ -734,74 +745,161 @@ fun TabSwitcherScreen(
     onTabSelect: (String) -> Unit,
     onTabClose: (String) -> Unit,
     onCloseAll: () -> Unit,
+    onCloseAllIncognito: () -> Unit = {},
     onAddTab: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
+    val activeTab = tabs.find { it.id == activeTabId }
+    var selectedTabSection by remember { mutableStateOf(if (activeTab?.isPrivate == true) 1 else 0) }
+
+    val regularTabs = tabs.filter { !it.isPrivate }
+    val incognitoTabs = tabs.filter { it.isPrivate }
+
+    val isIncognitoSection = selectedTabSection == 1
+    val backgroundColor = if (isIncognitoSection) Color(0xFF121212) else MaterialTheme.colorScheme.background
+    val topBarColor = if (isIncognitoSection) Color(0xFF1E1E1E) else MaterialTheme.colorScheme.surface
+    val contentColor = if (isIncognitoSection) Color.White else MaterialTheme.colorScheme.onSurface
+
     Scaffold(
+        containerColor = backgroundColor,
         topBar = {
             Surface(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
-                color = MaterialTheme.colorScheme.surface
+                color = topBarColor
             ) {
-                OptIn(ExperimentalMaterial3Api::class)
-                TopAppBar(
-                    title = { Text("Active Tabs (${tabs.size})", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, null)
-                        }
-                    },
-                    actions = {
-                        if (tabs.isNotEmpty()) {
-                            TextButton(onClick = onCloseAll) {
-                                Text("CLOSE ALL", color = MaterialTheme.colorScheme.error)
+                Column {
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = topBarColor,
+                            titleContentColor = contentColor,
+                            navigationIconContentColor = contentColor,
+                            actionIconContentColor = contentColor
+                        ),
+                        title = {
+                            Text(
+                                text = if (isIncognitoSection) "Incognito Tabs (${incognitoTabs.size})" else "Tabs (${regularTabs.size})",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                            )
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.Default.ArrowBack, "Back")
+                            }
+                        },
+                        actions = {
+                            if (isIncognitoSection) {
+                                if (incognitoTabs.isNotEmpty()) {
+                                    TextButton(onClick = onCloseAllIncognito) {
+                                        Text("CLOSE INCOGNITO", color = Color(0xFFFF8A80), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            } else {
+                                if (regularTabs.isNotEmpty()) {
+                                    TextButton(onClick = onCloseAll) {
+                                        Text("CLOSE ALL", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         }
+                    )
+
+                    PrimaryTabRow(
+                        selectedTabIndex = selectedTabSection,
+                        containerColor = topBarColor,
+                        contentColor = contentColor
+                    ) {
+                        Tab(
+                            selected = selectedTabSection == 0,
+                            onClick = { selectedTabSection = 0 },
+                            text = { Text("Regular (${regularTabs.size})", fontWeight = if (selectedTabSection == 0) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.Web, contentDescription = "Regular Tabs") },
+                            selectedContentColor = MaterialTheme.colorScheme.primary,
+                            unselectedContentColor = contentColor.copy(alpha = 0.6f),
+                            modifier = Modifier.testTag("tab_switcher_regular_tab")
+                        )
+                        Tab(
+                            selected = selectedTabSection == 1,
+                            onClick = { selectedTabSection = 1 },
+                            text = { Text("Incognito (${incognitoTabs.size})", fontWeight = if (selectedTabSection == 1) FontWeight.Bold else FontWeight.Normal) },
+                            icon = { Icon(Icons.Default.VisibilityOff, contentDescription = "Incognito Tabs") },
+                            selectedContentColor = if (isIncognitoSection) Color(0xFF81D4FA) else MaterialTheme.colorScheme.primary,
+                            unselectedContentColor = contentColor.copy(alpha = 0.6f),
+                            modifier = Modifier.testTag("tab_switcher_incognito_tab")
+                        )
                     }
-                )
+                }
             }
         },
         floatingActionButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FloatingActionButton(
-                    onClick = { onAddTab(true) },
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                    modifier = Modifier.testTag("add_private_tab_fab")
-                ) {
-                    Icon(Icons.Default.VisibilityOff, "New Private Tab")
-                }
-                FloatingActionButton(
-                    onClick = { onAddTab(false) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.testTag("add_tab_fab")
-                ) {
-                    Icon(Icons.Default.Add, "New Tab")
-                }
+            FloatingActionButton(
+                onClick = { onAddTab(isIncognitoSection) },
+                containerColor = if (isIncognitoSection) Color(0xFF2C2C2C) else MaterialTheme.colorScheme.primary,
+                contentColor = if (isIncognitoSection) Color.White else MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.testTag(if (isIncognitoSection) "add_private_tab_fab" else "add_tab_fab")
+            ) {
+                Icon(
+                    imageVector = if (isIncognitoSection) Icons.Default.VisibilityOff else Icons.Default.Add,
+                    contentDescription = if (isIncognitoSection) "New Incognito Tab" else "New Tab"
+                )
             }
         }
     ) { innerPadding ->
-        if (tabs.isEmpty()) {
+        val displayedTabs = if (isIncognitoSection) incognitoTabs else regularTabs
+        if (displayedTabs.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
+                    .padding(innerPadding)
+                    .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Outlined.Layers,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                        modifier = Modifier.size(72.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "No open tabs",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                if (isIncognitoSection) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth(0.85f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .background(Color(0xFF2A2A2A), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VisibilityOff,
+                                contentDescription = "Incognito Mode",
+                                tint = Color.LightGray,
+                                modifier = Modifier.size(44.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
+                            text = "You've gone Incognito",
+                            style = MaterialTheme.typography.titleLarge.copy(color = Color.White, fontWeight = FontWeight.Bold),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Pages you view in Incognito tabs won't save your browsing history, cookies, or site data after you close them. Downloaded files stay on disk.",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = Color.LightGray),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Outlined.Layers,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                            modifier = Modifier.size(72.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "No open regular tabs",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         } else {
@@ -812,7 +910,7 @@ fun TabSwitcherScreen(
                     .fillMaxSize()
                     .padding(8.dp)
             ) {
-                items(tabs) { tab ->
+                items(displayedTabs) { tab ->
                     TabCard(
                         tab = tab,
                         thumbnail = tabManager.getThumbnail(tab.id),
@@ -1465,14 +1563,23 @@ fun SettingsScreen(
             Text("Appearance", style = MaterialTheme.typography.titleSmall.copy(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold))
             Spacer(modifier = Modifier.height(8.dp))
 
-            val darkModeEnabled by viewModel.darkModeEnabled.collectAsState()
+            val darkModePref by viewModel.darkMode.collectAsState()
+            val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val isDarkTheme = when (darkModePref) {
+                "dark" -> true
+                "light" -> false
+                else -> isSystemDark
+            }
             ListItem(
-                headlineContent = { Text("Omni Smart Dark Mode") },
-                supportingContent = { Text("Force a highly compatible smart dark theme on all web pages") },
+                headlineContent = { Text("Dark Mode") },
+                supportingContent = { Text("Enable native dark theme for the browser UI and smart dark web content") },
                 trailingContent = {
                     Switch(
-                        checked = darkModeEnabled,
-                        onCheckedChange = { viewModel.setDarkModeEnabled(it) }
+                        checked = isDarkTheme,
+                        onCheckedChange = { isChecked ->
+                            val newMode = if (isChecked) "dark" else "light"
+                            viewModel.setDarkMode(newMode)
+                        }
                     )
                 }
             )
@@ -1513,57 +1620,6 @@ fun SettingsScreen(
                 }
             )
 
-            // Test Ad Blocker Button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                val context = androidx.compose.ui.platform.LocalContext.current
-                var showAdBlockTestResult by remember { mutableStateOf<String?>(null) }
-                
-                TextButton(
-                    onClick = {
-                        val engine = (context.applicationContext as com.example.BrowserApplication).container.adBlockEngine
-                        val adUrl = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"
-                        val trackerUrl = "https://sub.doubleclick.net/tracker.gif"
-                        val normalUrl = "https://google.com/search?q=hi"
-                        
-                        val adBlocked = engine.shouldBlock(adUrl)
-                        val trackerBlocked = engine.shouldBlock(trackerUrl)
-                        val normalBlocked = engine.shouldBlock(normalUrl)
-                        
-                        showAdBlockTestResult = """
-                            Ad Blocker Integrity Test:
-                            
-                            • pagead2.googlesyndication.com: ${if (adBlocked) "✅ BLOCKED (PASSED)" else "❌ ALLOWED (FAILED)"}
-                            • sub.doubleclick.net: ${if (trackerBlocked) "✅ BLOCKED (PASSED)" else "❌ ALLOWED (FAILED)"}
-                            • google.com (normal): ${if (!normalBlocked) "✅ ALLOWED (PASSED)" else "❌ BLOCKED (FAILED)"}
-                            
-                            Integrity check complete. The adblock engine is fully active!
-                        """.trimIndent()
-                    }
-                ) {
-                    Icon(Icons.Default.BugReport, null)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Test Ad Blocker")
-                }
-                
-                if (showAdBlockTestResult != null) {
-                    AlertDialog(
-                        onDismissRequest = { showAdBlockTestResult = null },
-                        title = { Text("Ad Blocker Test Result") },
-                        text = { Text(showAdBlockTestResult!!) },
-                        confirmButton = {
-                            TextButton(onClick = { showAdBlockTestResult = null }) {
-                                Text("Close")
-                            }
-                        }
-                    )
-                }
-            }
-
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
 
             ListItem(
@@ -1581,6 +1637,17 @@ fun SettingsScreen(
                 supportingContent = { Text("Intercept unrequested windows and redirections") },
                 trailingContent = {
                     Switch(checked = blockPopups, onCheckedChange = { viewModel.setBlockPopups(it) })
+                }
+            )
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+            val lockIncognitoTabs by viewModel.lockIncognitoTabs.collectAsState()
+            ListItem(
+                headlineContent = { Text("Lock Incognito tabs when leaving app") },
+                supportingContent = { Text("Require unlock screen overlay before viewing open Incognito tabs after returning to the app") },
+                trailingContent = {
+                    Switch(checked = lockIncognitoTabs, onCheckedChange = { viewModel.setLockIncognitoTabs(it) })
                 }
             )
 
@@ -1694,49 +1761,6 @@ fun SettingsScreen(
                         }
                     }
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                val coroutineScope = rememberCoroutineScope()
-                var dnsTestResult by remember { mutableStateOf<String?>(null) }
-                var isDnsTesting by remember { mutableStateOf(false) }
-
-                Button(
-                    onClick = {
-                        isDnsTesting = true
-                        dnsTestResult = "Testing connection to $customDnsText..."
-                        coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            val result = com.example.data.prefs.DohResolver.resolve("example.com", customDnsText)
-                            dnsTestResult = if (result != null) {
-                                "🟢 Test Successful! example.com resolved to: $result"
-                            } else {
-                                "🔴 Resolution failed. Ensure the server URL is active and accepts DNS-JSON query requests."
-                            }
-                            isDnsTesting = false
-                        }
-                    },
-                    enabled = !isDnsTesting && customDnsText.isNotBlank() && isValidDnsUrl,
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    if (isDnsTesting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    Text("Test DNS")
-                }
-
-                dnsTestResult?.let { result ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = result,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (result.startsWith("🟢")) Color(0xFF4CAF50) else if (result.startsWith("🔴")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))

@@ -101,16 +101,26 @@ class BrowserApplication : Application() {
             }
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val jsCacheDir = java.io.File(cacheDir, "WebView/Default/HTTP Cache/Code Cache/js")
-                val wasmCacheDir = java.io.File(cacheDir, "WebView/Default/HTTP Cache/Code Cache/wasm")
-                if (!jsCacheDir.exists()) jsCacheDir.mkdirs()
-                if (!wasmCacheDir.exists()) wasmCacheDir.mkdirs()
-            } catch (e: Exception) {
-                // Ignore any cache directory pre-creation errors
+        // Synchronously ensure Chromium WebView Code Cache directories exist before WebView initialization
+        try {
+            val cachePaths = listOf(
+                "WebView/Default/HTTP Cache/Code Cache/js",
+                "WebView/Default/HTTP Cache/Code Cache/wasm",
+                "WebView/HTTP Cache/Code Cache/js",
+                "WebView/HTTP Cache/Code Cache/wasm",
+                "org.chromium.android_webview/HTTP Cache/Code Cache/js",
+                "org.chromium.android_webview/HTTP Cache/Code Cache/wasm"
+            )
+            for (path in cachePaths) {
+                val dir = java.io.File(cacheDir, path)
+                dir.mkdirs()
+                java.io.File(dir, ".keep").createNewFile()
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
+        CoroutineScope(Dispatchers.IO).launch {
             container.adBlockEngine.loadBundled(this@BrowserApplication)
             try {
                 container.extensionRepository.deleteExtension("omni-dark-mode")

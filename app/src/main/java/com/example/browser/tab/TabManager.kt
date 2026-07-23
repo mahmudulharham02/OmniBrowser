@@ -131,15 +131,11 @@ class TabManager(private val webViewFactory: TabWebViewFactory) {
         thumbnails.remove(id)?.recycle()
 
         val listAfterClose = _tabs.value.filter { it.id != id }
+        _tabs.value = listAfterClose
         if (listAfterClose.isEmpty()) {
-            _tabs.value = emptyList()
             _activeTabId.value = null
-            createTab("omni://home")
-        } else {
-            _tabs.value = listAfterClose
-            if (_activeTabId.value == id) {
-                selectTab(listAfterClose.last().id)
-            }
+        } else if (_activeTabId.value == id) {
+            selectTab(listAfterClose.last().id)
         }
     }
 
@@ -154,7 +150,63 @@ class TabManager(private val webViewFactory: TabWebViewFactory) {
         return newTab
     }
 
-    fun closeAllTabs(addPlaceholder: Boolean = true) {
+    fun closeAllIncognitoTabs() {
+        val incognitoTabs = _tabs.value.filter { it.isPrivate }
+        if (incognitoTabs.isEmpty()) return
+
+        incognitoTabs.forEach { tab ->
+            val wv = activeWebViews.remove(tab.id)
+            if (wv != null) {
+                webViewFactory.recycle(wv)
+            }
+            thumbnails.remove(tab.id)?.recycle()
+        }
+
+        val remaining = _tabs.value.filter { !it.isPrivate }
+        _tabs.value = remaining
+
+        val activeId = _activeTabId.value
+        if (activeId == null || incognitoTabs.any { it.id == activeId }) {
+            if (remaining.isNotEmpty()) {
+                selectTab(remaining.last().id)
+            } else {
+                _activeTabId.value = null
+            }
+        }
+
+        try {
+            android.webkit.CookieManager.getInstance().flush()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun closeAllRegularTabs() {
+        val regularTabs = _tabs.value.filter { !it.isPrivate }
+        if (regularTabs.isEmpty()) return
+
+        regularTabs.forEach { tab ->
+            val wv = activeWebViews.remove(tab.id)
+            if (wv != null) {
+                webViewFactory.recycle(wv)
+            }
+            thumbnails.remove(tab.id)?.recycle()
+        }
+
+        val remaining = _tabs.value.filter { it.isPrivate }
+        _tabs.value = remaining
+
+        val activeId = _activeTabId.value
+        if (activeId == null || regularTabs.any { it.id == activeId }) {
+            if (remaining.isNotEmpty()) {
+                selectTab(remaining.last().id)
+            } else {
+                _activeTabId.value = null
+            }
+        }
+    }
+
+    fun closeAllTabs(addPlaceholder: Boolean = false) {
         // Recycle all active WebViews
         activeWebViews.forEach { (_, wv) ->
             webViewFactory.recycle(wv)
@@ -179,6 +231,10 @@ class TabManager(private val webViewFactory: TabWebViewFactory) {
 
     fun getThumbnail(id: String): Bitmap? {
         return thumbnails[id]
+    }
+
+    fun getActiveWebViews(): Map<String, android.webkit.WebView> {
+        return activeWebViews
     }
 
     fun updateTab(id: String, transform: (TabModel) -> TabModel) {

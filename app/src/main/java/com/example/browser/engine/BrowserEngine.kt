@@ -56,10 +56,12 @@ class BrowserEngine(
                 cacheMode = WebSettings.LOAD_NO_CACHE
                 databaseEnabled = false
                 domStorageEnabled = false
+                saveFormData = false
             } else {
                 cacheMode = WebSettings.LOAD_DEFAULT
                 databaseEnabled = true
                 domStorageEnabled = true
+                saveFormData = true
             }
 
             // Standard options
@@ -69,22 +71,15 @@ class BrowserEngine(
             builtInZoomControls = true
             displayZoomControls = false
 
-            // Native Force Dark
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                val darkMode = runBlocking { settingsDataStore.darkModeMode() }
-                val forceDarkMode = when (darkMode) {
-                    "dark" -> WebSettings.FORCE_DARK_ON
-                    "light" -> WebSettings.FORCE_DARK_OFF
-                    else -> WebSettings.FORCE_DARK_AUTO
-                }
-                forceDark = forceDarkMode
-            }
+            // Native Force Dark / Smart Dark Mode
+            updateWebViewDarkMode(webView)
         }
 
         // 3. Configure Cookie Isolation
         val cookieManager = CookieManager.getInstance()
         if (isPrivate) {
-            cookieManager.setAcceptCookie(false)
+            cookieManager.setAcceptCookie(true)
+            cookieManager.setAcceptThirdPartyCookies(webView, false)
         } else {
             cookieManager.setAcceptCookie(true)
             cookieManager.setAcceptThirdPartyCookies(webView, !blockThirdParty)
@@ -124,7 +119,8 @@ class BrowserEngine(
                 contentDisposition = contentDisposition,
                 mimeType = mimeType,
                 contentLength = contentLength,
-                refererUrl = webView.url
+                refererUrl = webView.url,
+                isPrivate = isPrivate
             )
         }
 
@@ -140,6 +136,61 @@ class BrowserEngine(
                 ),
                 "OmniExtensionBridge"
             )
+        }
+    }
+
+    fun updateWebViewDarkMode(webView: WebView) {
+        val darkMode = runBlocking { settingsDataStore.darkModeMode() }
+        val isSystemDark = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val isDarkTheme = when (darkMode) {
+            "dark" -> true
+            "light" -> false
+            else -> isSystemDark
+        }
+
+        if (isDarkTheme) {
+            webView.setBackgroundColor(android.graphics.Color.parseColor("#121212"))
+        } else {
+            webView.setBackgroundColor(android.graphics.Color.WHITE)
+        }
+
+        webView.settings.apply {
+            if (isDarkTheme) {
+                if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.FORCE_DARK)) {
+                    androidx.webkit.WebSettingsCompat.setForceDark(
+                        this,
+                        androidx.webkit.WebSettingsCompat.FORCE_DARK_ON
+                    )
+                } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    @Suppress("DEPRECATION")
+                    forceDark = android.webkit.WebSettings.FORCE_DARK_ON
+                }
+
+                if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.FORCE_DARK_STRATEGY)) {
+                    androidx.webkit.WebSettingsCompat.setForceDarkStrategy(
+                        this,
+                        2 // WebSettingsCompat.DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING
+                    )
+                }
+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    isAlgorithmicDarkeningAllowed = true
+                }
+            } else {
+                if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.FORCE_DARK)) {
+                    androidx.webkit.WebSettingsCompat.setForceDark(
+                        this,
+                        androidx.webkit.WebSettingsCompat.FORCE_DARK_OFF
+                    )
+                } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    @Suppress("DEPRECATION")
+                    forceDark = android.webkit.WebSettings.FORCE_DARK_OFF
+                }
+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    isAlgorithmicDarkeningAllowed = false
+                }
+            }
         }
     }
 }

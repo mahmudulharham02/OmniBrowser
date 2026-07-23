@@ -25,6 +25,7 @@ data class PendingDownload(
     val mimeType: String,
     val contentLength: Long,
     val filename: String,
+    val isPrivate: Boolean = false,
     val onConfirm: (Boolean) -> Unit
 )
 
@@ -45,7 +46,8 @@ class DownloadHandler(
         contentDisposition: String,
         mimeType: String,
         contentLength: Long,
-        refererUrl: String? = null
+        refererUrl: String? = null,
+        isPrivate: Boolean = false
     ) {
         coroutineScope.launch {
             // 1. Block if URL is on the ad/tracker list
@@ -67,7 +69,7 @@ class DownloadHandler(
             val askBeforeDownload = settingsDataStore.askBeforeDownload.first()
 
             if (!askBeforeDownload) {
-                startDownload(url, userAgent, contentDisposition, mimeType, contentLength, filename, refererUrl)
+                startDownload(url, userAgent, contentDisposition, mimeType, contentLength, filename, refererUrl, isPrivate)
             } else {
                 _pendingDownload.value = PendingDownload(
                     url = url,
@@ -79,7 +81,7 @@ class DownloadHandler(
                     onConfirm = { confirmed ->
                         _pendingDownload.value = null
                         if (confirmed) {
-                            startDownload(url, userAgent, contentDisposition, mimeType, contentLength, filename, refererUrl)
+                            startDownload(url, userAgent, contentDisposition, mimeType, contentLength, filename, refererUrl, isPrivate)
                         }
                     }
                 )
@@ -94,7 +96,8 @@ class DownloadHandler(
         mimeType: String,
         contentLength: Long,
         filename: String,
-        refererUrl: String?
+        refererUrl: String?,
+        isPrivate: Boolean = false
     ) {
         try {
             val request = DownloadManager.Request(Uri.parse(url)).apply {
@@ -112,16 +115,18 @@ class DownloadHandler(
             val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             val downloadId = dm.enqueue(request)
 
-            coroutineScope.launch(Dispatchers.IO) {
-                downloadRepository.recordDownload(
-                    id = downloadId,
-                    url = url,
-                    filename = filename,
-                    mimeType = mimeType,
-                    totalBytes = contentLength,
-                    status = "running",
-                    refererUrl = refererUrl
-                )
+            if (!isPrivate) {
+                coroutineScope.launch(Dispatchers.IO) {
+                    downloadRepository.recordDownload(
+                        id = downloadId,
+                        url = url,
+                        filename = filename,
+                        mimeType = mimeType,
+                        totalBytes = contentLength,
+                        status = "running",
+                        refererUrl = refererUrl
+                    )
+                }
             }
             Toast.makeText(context, "Starting download: $filename", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {

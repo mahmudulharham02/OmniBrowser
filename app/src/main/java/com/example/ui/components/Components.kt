@@ -78,6 +78,17 @@ fun AddressBar(
         )
     }
 
+    var suggestions by remember { mutableStateOf<List<com.example.search.SearchSuggestion>>(emptyList()) }
+
+    LaunchedEffect(textFieldValue.text, isFocused) {
+        if (!isFocused || textFieldValue.text.isBlank()) {
+            suggestions = emptyList()
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(150)
+        suggestions = com.example.search.SearchSuggestionRepository.fetchSuggestions(textFieldValue.text)
+    }
+
     val isHttps = url.startsWith("https://")
     val isLocal = url.startsWith("omni://")
 
@@ -249,6 +260,20 @@ fun AddressBar(
                     .height(2.dp)
             )
         }
+
+        if (isFocused && suggestions.isNotEmpty()) {
+            SearchSuggestionsOverlay(
+                suggestions = suggestions,
+                onSuggestionSelected = { selected ->
+                    textFieldValue = TextFieldValue(text = selected, selection = TextRange(selected.length))
+                    suggestions = emptyList()
+                    onUrlSubmit(selected)
+                },
+                onSuggestionInserted = { inserted ->
+                    textFieldValue = TextFieldValue(text = inserted, selection = TextRange(inserted.length))
+                }
+            )
+        }
     }
 }
 
@@ -351,7 +376,12 @@ fun TabCard(
             .padding(4.dp)
             .height(180.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = when {
+                tab.isPrivate && isActive -> Color(0xFF333333)
+                tab.isPrivate -> Color(0xFF222222)
+                isActive -> MaterialTheme.colorScheme.primaryContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
         ),
         shape = RoundedCornerShape(12.dp),
         onClick = onClick
@@ -370,9 +400,13 @@ fun TabCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = if (tab.isPrivate) Icons.Default.PrivacyTip else Icons.Default.Web,
+                        imageVector = if (tab.isPrivate) Icons.Default.VisibilityOff else Icons.Default.Web,
                         contentDescription = null,
-                        tint = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = when {
+                            tab.isPrivate -> Color.LightGray
+                            isActive -> MaterialTheme.colorScheme.onPrimaryContainer
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -381,7 +415,11 @@ fun TabCard(
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = when {
+                            tab.isPrivate -> Color.White
+                            isActive -> MaterialTheme.colorScheme.onPrimaryContainer
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
 
@@ -392,7 +430,11 @@ fun TabCard(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close tab",
-                        tint = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = when {
+                            tab.isPrivate -> Color.LightGray
+                            isActive -> MaterialTheme.colorScheme.onPrimaryContainer
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -773,11 +815,10 @@ fun ChromeTopBar(
     customDnsUrl: String = "",
     isPrivate: Boolean = false
 ) {
+    val topBarColor = if (isPrivate) Color(0xFF1E1E1E) else MaterialTheme.colorScheme.surface
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding(),
-        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier.fillMaxWidth(),
+        color = topBarColor,
         tonalElevation = 8.dp
     ) {
         Row(
@@ -1012,6 +1053,17 @@ fun CompactAddressBar(
         )
     }
 
+    var suggestions by remember { mutableStateOf<List<com.example.search.SearchSuggestion>>(emptyList()) }
+
+    LaunchedEffect(textFieldValue.text, isFocused) {
+        if (!isFocused || textFieldValue.text.isBlank()) {
+            suggestions = emptyList()
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(150)
+        suggestions = com.example.search.SearchSuggestionRepository.fetchSuggestions(textFieldValue.text)
+    }
+
     val isHttps = url.startsWith("https://")
     val isLocal = url.startsWith("omni://")
 
@@ -1133,6 +1185,20 @@ fun CompactAddressBar(
                     .padding(horizontal = 4.dp, vertical = 1.dp)
             )
         }
+
+        if (isFocused && suggestions.isNotEmpty()) {
+            SearchSuggestionsOverlay(
+                suggestions = suggestions,
+                onSuggestionSelected = { selected ->
+                    textFieldValue = TextFieldValue(text = selected, selection = TextRange(selected.length))
+                    suggestions = emptyList()
+                    onUrlSubmit(selected)
+                },
+                onSuggestionInserted = { inserted ->
+                    textFieldValue = TextFieldValue(text = inserted, selection = TextRange(inserted.length))
+                }
+            )
+        }
     }
 }
 
@@ -1153,6 +1219,8 @@ fun RedesignedMenuPopup(
     onAddToHomeScreen: () -> Unit,
     isDesktopSite: Boolean,
     onToggleDesktopSite: () -> Unit,
+    isDarkTheme: Boolean = false,
+    onToggleDarkTheme: (() -> Unit)? = null,
     onSettings: () -> Unit,
     onHelpFeedback: () -> Unit,
     modifier: Modifier = Modifier
@@ -1179,7 +1247,7 @@ fun RedesignedMenuPopup(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 24.dp)
                     .clickable(enabled = false) {},
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(28.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
             ) {
@@ -1192,16 +1260,41 @@ fun RedesignedMenuPopup(
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)
                             .size(width = 36.dp, height = 4.dp)
-                            .background(Color.Gray.copy(alpha = 0.5f), RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(2.dp))
                     )
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Text(
-                        text = "Browser Options",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Browser Options",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+
+                        if (onToggleDarkTheme != null) {
+                            FilterChip(
+                                selected = isDarkTheme,
+                                onClick = { onToggleDarkTheme() },
+                                label = { Text(if (isDarkTheme) "Dark Mode" else "Light Mode") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                                        contentDescription = "Toggle Theme",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                modifier = Modifier.testTag("menu_theme_chip")
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Column(
                         modifier = Modifier
@@ -1209,26 +1302,37 @@ fun RedesignedMenuPopup(
                             .heightIn(max = 400.dp)
                             .verticalScroll(androidx.compose.foundation.rememberScrollState())
                     ) {
-                        val items = listOf(
-                            MenuItemData("New Tab", Icons.Default.Add, onNewTab),
-                            MenuItemData("New Incognito Tab", Icons.Default.VisibilityOff, onNewIncognitoTab),
-                            MenuItemData("History", Icons.Default.History, onHistory),
-                            MenuItemData("Delete Browsing Data", Icons.Default.Delete, onDeleteBrowsingData),
-                            MenuItemData("Downloads", Icons.Default.FileDownload, onDownloads),
-                            MenuItemData("Bookmarks", Icons.Default.Bookmark, onBookmarks),
-                            MenuItemData("Recent Tabs", Icons.Default.Undo, onRecentTabs),
-                            MenuItemData("Share", Icons.Default.Share, onShare),
-                            MenuItemData("Find in Page", Icons.Default.Search, onFindInPage),
-                            MenuItemData("Translate", Icons.Default.Language, onTranslate),
-                            MenuItemData("Add to Home Screen", Icons.Default.Home, onAddToHomeScreen),
-                            MenuItemData(
-                                if (isDesktopSite) "Request Mobile Site" else "Request Desktop Site",
-                                Icons.Default.Phonelink,
-                                onToggleDesktopSite
-                            ),
-                            MenuItemData("Settings", Icons.Default.Settings, onSettings),
-                            MenuItemData("Help & Feedback", Icons.Default.Info, onHelpFeedback)
-                        )
+                        val items = mutableListOf<MenuItemData>().apply {
+                            add(MenuItemData("New Tab", Icons.Default.Add, onNewTab))
+                            add(MenuItemData("New Incognito Tab", Icons.Default.VisibilityOff, onNewIncognitoTab))
+                            if (onToggleDarkTheme != null) {
+                                add(
+                                    MenuItemData(
+                                        if (isDarkTheme) "Switch to Light Theme" else "Switch to Dark Theme",
+                                        if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                        { onToggleDarkTheme() }
+                                    )
+                                )
+                            }
+                            add(MenuItemData("History", Icons.Default.History, onHistory))
+                            add(MenuItemData("Delete Browsing Data", Icons.Default.Delete, onDeleteBrowsingData))
+                            add(MenuItemData("Downloads", Icons.Default.FileDownload, onDownloads))
+                            add(MenuItemData("Bookmarks", Icons.Default.Bookmark, onBookmarks))
+                            add(MenuItemData("Recent Tabs", Icons.Default.Undo, onRecentTabs))
+                            add(MenuItemData("Share", Icons.Default.Share, onShare))
+                            add(MenuItemData("Find in Page", Icons.Default.Search, onFindInPage))
+                            add(MenuItemData("Translate", Icons.Default.Language, onTranslate))
+                            add(MenuItemData("Add to Home Screen", Icons.Default.Home, onAddToHomeScreen))
+                            add(
+                                MenuItemData(
+                                    if (isDesktopSite) "Request Mobile Site" else "Request Desktop Site",
+                                    Icons.Default.Phonelink,
+                                    onToggleDesktopSite
+                                )
+                            )
+                            add(MenuItemData("Settings", Icons.Default.Settings, onSettings))
+                            add(MenuItemData("Help & Feedback", Icons.Default.Info, onHelpFeedback))
+                        }
 
                         items.forEach { item ->
                             Row(
@@ -1244,16 +1348,16 @@ fun RedesignedMenuPopup(
                                 Icon(
                                     imageVector = item.icon,
                                     contentDescription = item.text,
-                                    tint = Color.LightGray,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(24.dp)
                                 )
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Text(
                                     text = item.text,
-                                    style = MaterialTheme.typography.bodyLarge.copy(color = Color.White)
+                                    style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
                                 )
                             }
-                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                         }
                     }
                 }

@@ -7,11 +7,14 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
@@ -24,6 +27,7 @@ import com.example.ui.components.ConfirmDialog
 import com.example.ui.theme.MyApplicationTheme
 import com.example.data.CatalogIndexEntity
 import com.example.data.SavedTabEntity
+import com.example.browser.incognito.IncognitoNotificationManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 
@@ -47,9 +51,19 @@ class MainActivity : ComponentActivity() {
 
         // Pre-create WebView Code Cache directories to prevent Chromium opendir errors
         try {
-            val webViewCacheDir = java.io.File(cacheDir, "WebView/Default/HTTP Cache/Code Cache")
-            java.io.File(webViewCacheDir, "js").mkdirs()
-            java.io.File(webViewCacheDir, "wasm").mkdirs()
+            val cachePaths = listOf(
+                "WebView/Default/HTTP Cache/Code Cache/js",
+                "WebView/Default/HTTP Cache/Code Cache/wasm",
+                "WebView/HTTP Cache/Code Cache/js",
+                "WebView/HTTP Cache/Code Cache/wasm",
+                "org.chromium.android_webview/HTTP Cache/Code Cache/js",
+                "org.chromium.android_webview/HTTP Cache/Code Cache/wasm"
+            )
+            for (path in cachePaths) {
+                val dir = java.io.File(cacheDir, path)
+                dir.mkdirs()
+                java.io.File(dir, ".keep").createNewFile()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -75,6 +89,13 @@ class MainActivity : ComponentActivity() {
                 darkTheme = isDarkTheme,
                 isIncognito = currentTab?.isPrivate == true
             ) {
+                LaunchedEffect(isDarkTheme) {
+                    val activeViews = container.tabManager.getActiveWebViews()
+                    activeViews.forEach { (_, webView) ->
+                        container.browserEngine.updateWebViewDarkMode(webView)
+                    }
+                }
+
                 val context = LocalContext.current
                 val coroutineScope = rememberCoroutineScope()
 
@@ -102,6 +123,8 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // Ensure at least one tab is created on startup
+                var isInitialized by remember { mutableStateOf(false) }
+
                 LaunchedEffect(Unit) {
                     val restoreEnabled = container.settingsDataStore.restoreTabsOnStartup.first()
                     var restored = false
@@ -142,6 +165,7 @@ class MainActivity : ComponentActivity() {
                     if (!restored && browserViewModel.tabs.value.isEmpty()) {
                         browserViewModel.createNewTab("omni://home")
                     }
+                    isInitialized = true
                 }
 
                 // App Navigation states
@@ -154,6 +178,50 @@ class MainActivity : ComponentActivity() {
                 val tabs by browserViewModel.tabs.collectAsState()
                 val activeTabId by browserViewModel.activeTabId.collectAsState()
                 val customDnsUrl by browserViewModel.customDnsUrl.collectAsState()
+
+                // Incognito Session Manager Notification
+                val incognitoNotificationManager = remember { IncognitoNotificationManager(context) }
+                val incognitoCount = remember(tabs) { tabs.count { it.isPrivate } }
+
+                LaunchedEffect(incognitoCount) {
+                    incognitoNotificationManager.updateNotification(incognitoCount)
+                }
+
+                DisposableEffect(Unit) {
+                    val listener = androidx.core.util.Consumer<android.content.Intent> { intent ->
+                        if (intent.action == IncognitoNotificationManager.ACTION_CLOSE_INCOGNITO) {
+                            browserViewModel.tabManager.closeAllIncognitoTabs()
+                            Toast.makeText(context, "Closed all Incognito tabs", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    addOnNewIntentListener(listener)
+                    onDispose {
+                        removeOnNewIntentListener(listener)
+                    }
+                }
+
+                var isIncognitoLocked by remember { mutableStateOf(false) }
+                val lockIncognitoSetting by settingsViewModel.lockIncognitoTabs.collectAsState()
+
+                DisposableEffect(Unit) {
+                    val lifecycleListener = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                            if (lockIncognitoSetting && tabs.any { it.isPrivate }) {
+                                isIncognitoLocked = true
+                            }
+                        }
+                    }
+                    lifecycle.addObserver(lifecycleListener)
+                    onDispose {
+                        lifecycle.removeObserver(lifecycleListener)
+                    }
+                }
+
+                LaunchedEffect(tabs, isInitialized) {
+                    if (isInitialized && tabs.isEmpty()) {
+                        (context as? android.app.Activity)?.finish()
+                    }
+                }
 
                 LaunchedEffect(activeTabId, currentTab?.url, currentScreen) {
                     areBarsVisible = true
@@ -214,7 +282,11 @@ class MainActivity : ComponentActivity() {
                                             currentScreen = BrowserScreenType.TABS
                                         },
                                         onMenuClick = { showMenu = true },
-                                        tabCount = tabs.size
+                                        tabCount = tabs.size,
+                                        isDarkTheme = isDarkTheme,
+                                        onToggleDarkTheme = {
+                                            settingsViewModel.setDarkMode(if (isDarkTheme) "light" else "dark")
+                                        }
                                     )
                                 } else {
                                     BrowserScreen(
@@ -227,15 +299,16 @@ class MainActivity : ComponentActivity() {
                                         tabManager = container.tabManager,
                                         areBarsVisible = areBarsVisible,
                                         onScrollChanged = { scrollY, oldScrollY ->
-                                            if (scrollY == 0) {
+                                            val delta = scrollY - oldScrollY
+                                            if (scrollY <= 10) {
                                                 if (!areBarsVisible) {
                                                     areBarsVisible = true
                                                 }
-                                            } else if (scrollY > oldScrollY + 5) {
+                                            } else if (delta > 2) {
                                                 if (areBarsVisible) {
                                                     areBarsVisible = false
                                                 }
-                                            } else if (scrollY < oldScrollY - 5) {
+                                            } else if (delta < -2) {
                                                 if (!areBarsVisible) {
                                                     areBarsVisible = true
                                                 }
@@ -257,7 +330,10 @@ class MainActivity : ComponentActivity() {
                                         browserViewModel.closeTab(id)
                                     },
                                     onCloseAll = {
-                                        browserViewModel.closeAllTabs()
+                                        browserViewModel.tabManager.closeAllRegularTabs()
+                                    },
+                                    onCloseAllIncognito = {
+                                        browserViewModel.tabManager.closeAllIncognitoTabs()
                                     },
                                     onAddTab = { privateMode ->
                                         browserViewModel.createNewTab("omni://home", privateMode)
@@ -351,12 +427,27 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
+                        // Permanent Top System Strip (always stays visible above status bar area)
+                        val permanentBarColor = if (currentTab?.isPrivate == true) androidx.compose.ui.graphics.Color(0xFF1E1E1E) else MaterialTheme.colorScheme.surface
+                        Box(
+                            modifier = Modifier
+                                .align(androidx.compose.ui.Alignment.TopCenter)
+                                .fillMaxWidth()
+                                .windowInsetsTopHeight(WindowInsets.statusBars)
+                                .background(permanentBarColor)
+                                .zIndex(200f)
+                        )
+
                         if (currentScreen == BrowserScreenType.BROWSER && currentTab != null && currentTab?.url != "omni://home") {
                             val density = androidx.compose.ui.platform.LocalDensity.current
-                            val topBarHeightPx = with(density) { 85.dp.toPx() }
+                            val statusBarHeightDp = with(density) { WindowInsets.statusBars.getTop(density).toDp() }
+                            val topBarHeightPx = with(density) { 56.dp.toPx() }
                             val translationY by androidx.compose.animation.core.animateFloatAsState(
                                 targetValue = if (areBarsVisible || showMenu) 0f else -topBarHeightPx,
-                                animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow),
+                                animationSpec = androidx.compose.animation.core.tween(
+                                    durationMillis = 200,
+                                    easing = androidx.compose.animation.core.FastOutSlowInEasing
+                                ),
                                 label = "TopBarTranslation"
                             )
 
@@ -379,12 +470,62 @@ class MainActivity : ComponentActivity() {
                                 onForward = { browserViewModel.goForwardInActiveTab() },
                                 modifier = Modifier
                                     .align(androidx.compose.ui.Alignment.TopCenter)
+                                    .padding(top = statusBarHeightDp)
+                                    .zIndex(100f)
                                     .graphicsLayer {
                                         this.translationY = translationY
                                     },
                                 customDnsUrl = customDnsUrl,
                                 isPrivate = currentTab?.isPrivate == true
                             )
+                        }
+
+                        // Incognito Lock Overlay Screen
+                        if (isIncognitoLocked && currentTab?.isPrivate == true) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(androidx.compose.ui.graphics.Color(0xFF121212))
+                                    .zIndex(300f),
+                                contentAlignment = androidx.compose.ui.Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(32.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(80.dp)
+                                            .background(androidx.compose.ui.graphics.Color(0xFF2B2B2B), androidx.compose.foundation.shape.CircleShape),
+                                        contentAlignment = androidx.compose.ui.Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = "Locked",
+                                            tint = androidx.compose.ui.graphics.Color.White,
+                                            modifier = Modifier.size(40.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    Text(
+                                        text = "Incognito tabs are locked",
+                                        style = MaterialTheme.typography.titleLarge.copy(color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold)
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        text = "Unlock to view your open Incognito tabs.",
+                                        style = MaterialTheme.typography.bodyMedium.copy(color = androidx.compose.ui.graphics.Color.LightGray),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(28.dp))
+                                    Button(
+                                        onClick = { isIncognitoLocked = false },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                    ) {
+                                        Text("Unlock Incognito Tabs", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                         }
 
                         // Custom Redesigned Menu Popup Overlay
@@ -445,6 +586,10 @@ class MainActivity : ComponentActivity() {
                             onToggleDesktopSite = {
                                 browserViewModel.toggleDesktopModeForActiveTab()
                             },
+                            isDarkTheme = isDarkTheme,
+                            onToggleDarkTheme = {
+                                settingsViewModel.setDarkMode(if (isDarkTheme) "light" else "dark")
+                            },
                             onSettings = {
                                 currentScreen = BrowserScreenType.SETTINGS
                             },
@@ -462,15 +607,20 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         val container = (application as BrowserApplication).container
-        val tabs = container.tabManager.tabs.value
-        val list = tabs.mapIndexed { index, tab ->
+
+        // Ephemeral tabs lifecycle: destroy all incognito tabs when app goes to background / closes
+        container.tabManager.closeAllIncognitoTabs()
+
+        // Persist only non-private tabs
+        val regularTabs = container.tabManager.tabs.value.filter { !it.isPrivate }
+        val list = regularTabs.mapIndexed { index, tab ->
             com.example.data.SavedTabEntity(
                 id = tab.id,
                 url = tab.url,
                 title = tab.title,
                 faviconUrl = tab.faviconUrl,
                 position = index,
-                isPrivate = tab.isPrivate,
+                isPrivate = false,
                 lastAccessedEpoch = tab.createdAt
             )
         }
